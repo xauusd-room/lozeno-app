@@ -1,5 +1,7 @@
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://lozeno-api.aaa375750526.workers.dev'
+
+const API_BASE = 'https://lozeno-api.aaa375750526.workers.dev'
+
 
 const TOKEN_KEY = 'lozeno_access_token'
 
