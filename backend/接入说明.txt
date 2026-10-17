@@ -1,0 +1,30 @@
+LOZENO 后端 auth 模块接入
+
+把 main.py、database.py、auth/ 复制到现有 backend 目录覆盖/新增对应文件。
+注意：main.py 来源于用户提供的当前版本，保留现有订单、支付、授权接口路径和业务流程。不要覆盖现有 payments/、licenses/ 目录或 data/lozeno.db。
+
+原 main.py 中 ORDER_EXPIRE_MINUTES=1 已保留，不做业务参数变更。
+main.py 的数据库路径和 get_db() 已统一改由 database.py 提供。
+auth/router.py 在 main.py 末尾注册，避免循环导入。
+
+启动：
+python -m uvicorn main:app --host 127.0.0.1 --port 8000
+
+文档：
+http://127.0.0.1:8000/docs
+
+认证接口：
+POST /api/auth/register
+POST /api/auth/login
+GET /api/auth/me
+POST /api/auth/logout
+
+登录后在需要认证的请求头中添加：
+Authorization: Bearer <access_token>
+
+范围与安全说明：
+- 密码采用 PBKDF2-HMAC-SHA256 加盐哈希。
+- 数据库仅保存会话令牌的 SHA-256 哈希；令牌有效期 7 天。
+- email_verified 暂为 false，当前没有发送邮件验证。
+- 本次未将订单关联 user_id，未实现用户订单隔离。
+- 当前为 Bearer Token 原型；上线前需补 HTTPS、登录限速、邮箱验证、密码重置，并评估 HttpOnly Cookie。

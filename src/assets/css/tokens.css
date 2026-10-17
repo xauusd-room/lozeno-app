@@ -1,0 +1,38 @@
+
+:root {
+  --主页面背景色:#0b0d12;
+  --表面卡片背景色:#141722;
+  --输入框背景色:#1b1e26;
+  --主色调蓝色:#315bff;
+  --主色调悬停色:#4169ff;
+  --主色发光特效:rgba(49,91,255,.2);
+  --边框线条颜色:#222630;
+  --主要文字颜色:#fff;
+  --次要灰色文字:#848e9c;
+  --涨势绿色:#0ecb81;
+  --跌势红色:#f6465d;
+  --logo标志字号:21px;
+  --导航栏字号:14px;
+  --页面大标题字号:32px;
+  --正文常规字号:14px;
+  --辅助副文本字号:13px;
+  --最纤细徽章字号:11px;
+  --小圆角:6px;
+  --中圆角:10px;
+  --大圆角:16px;
+  --页面最大宽度:1320px;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--主页面背景色);color:var(--主要文字颜色);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+.page-container{width:100%;max-width:var(--页面最大宽度);margin-inline:auto;padding-inline:16px}
+html:has(.market-page) {
+  scrollbar-width: none;
+}
+
+html:has(.market-page)::-webkit-scrollbar,
+body:has(.market-page)::-webkit-scrollbar {
+  display: none;
+}
+
+a{color:inherit;text-decoration:none}
