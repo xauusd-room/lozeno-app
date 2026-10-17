@@ -1,4 +1,6 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://lozeno-api.aaa375750526.workers.dev'
+
 const TOKEN_KEY = 'lozeno_access_token'
 
 export function getToken() {
