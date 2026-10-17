@@ -48,6 +48,7 @@
 </template>
 
 <script setup>
+import { ref, computed, onMounted } from 'vue'
 import MarketSummary from '../components/Market/MarketSummary.vue'
 import MarketCharts from '../components/Market/MarketCharts.vue'
 import MarketSentiment from '../components/Market/MarketSentiment.vue'
