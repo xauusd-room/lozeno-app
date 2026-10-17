@@ -48,14 +48,13 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
-import MarketSummary from '../components/market/MarketSummary.vue'
-import MarketCharts from '../components/market/MarketCharts.vue'
-import MarketSentiment from '../components/market/MarketSentiment.vue'
-import MarketSignals from '../components/market/MarketSignals.vue'
-import MarketRiskMatrix from '../components/market/MarketRiskMatrix.vue'
-import MarketOutlook from '../components/market/MarketOutlook.vue'
-import MarketTechnicals from '../components/market/MarketTechnicals.vue'
+import MarketSummary from '../components/Market/MarketSummary.vue'
+import MarketCharts from '../components/Market/MarketCharts.vue'
+import MarketSentiment from '../components/Market/MarketSentiment.vue'
+import MarketSignals from '../components/Market/MarketSignals.vue'
+import MarketRiskMatrix from '../components/Market/MarketRiskMatrix.vue'
+import MarketOutlook from '../components/Market/MarketOutlook.vue'
+import MarketTechnicals from '../components/Market/MarketTechnicals.vue'
 
 const data = ref(null)
 const loading = ref(true)
