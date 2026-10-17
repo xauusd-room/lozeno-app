@@ -1,4 +1,4 @@
-```
+
 <template>
 <div class="modal-mask" @click.self="$emit('close')">
 <section class="purchase-modal">
@@ -142,7 +142,7 @@ import {paymentConfig} from '../data/paymentConfig'
 const props=defineProps({product:{type:Object,required:true}})
 defineEmits(['close','created'])
 
-const API='http://127.0.0.1:8000'
+const API='https://lozeno-api.aaa375750526.workers.dev'
 const loading=ref(false)
 const checking=ref(false)
 const pollingActive=ref(false)
@@ -373,4 +373,3 @@ stopPolling()
 .notice{margin-top:10px;color:var(--次要灰色文字,#848e9c);font-size:11px;line-height:1.6;text-align:center}.error{margin-top:10px;padding:10px 12px;border-radius:7px;background:rgba(246,70,93,.1);color:#f6465d;font-size:12px}.create-area{padding-top:2px}
 @media(max-width:560px){.purchase-modal{padding:22px}.qr-box{width:190px;height:190px}}
 </style>
-```
