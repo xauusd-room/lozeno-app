@@ -1,4 +1,3 @@
-
 <template>
   <div class="mask" @click.self="emit('close')">
     <section class="modal">
