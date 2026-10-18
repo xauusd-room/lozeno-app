@@ -1,575 +1,207 @@
 
 <template>
-  <div class="modal-mask">
-    <section class="purchase-modal">
-      <button class="close-btn" @click="$emit('close')">×</button>
+  <div class="mask" @click.self="emit('close')">
+    <section class="modal">
+      <button class="close" @click="emit('close')">×</button>
+      <h2>{{ order ? '订单详情' : `购买 ${product.name}` }}</h2>
+      <div class="price">{{ displayPrice }}</div>
 
-      <div class="modal-head">
-        <div class="modal-icon">
-          <img :src="`/images/ea/${product.id}.png`" :alt="product.name">
-        </div>
-        <div>
-          <h2>购买 {{ product.name }}</h2>
-          <p>{{ product.subtitle }}</p>
-        </div>
-      </div>
-
-      <div class="price-row">
-        <span>应付金额</span>
-        <strong>{{ product.price }}</strong>
-      </div>
-
-      <div class="info-list">
-        <div><span>授权方式</span><b>{{ product.license }}</b></div>
-        <div><span>支持平台</span><b>{{ product.platform }}</b></div>
-        <div><span>适用市场</span><b>{{ product.market }}</b></div>
-      </div>
-
-      <div v-if="!order" class="create-area">
+      <template v-if="!order">
         <div class="methods">
-          <button
-            v-for="(item, key) in paymentMethods"
-            :key="key"
-            class="method"
-            :class="{ active: method === key }"
-            @click="method = key"
-          >
-            <span>{{ item.icon }}</span>
-            <strong>{{ item.name }}</strong>
-          </button>
+          <button v-for="m in methods" :key="m.value" :class="{active:method===m.value}" @click="method=m.value">{{ m.label }}</button>
+        </div>
+        <div v-if="method==='usdt'" class="usdt-preview">
+          <p>网络：TRC20</p>
+          <p class="address">{{ usdtAddress }}</p>
+          <button class="secondary" @click="copy(usdtAddress)">复制收款地址</button>
+        </div>
+        <button class="primary" :disabled="loading" @click="createOrder">{{ loading ? '正在创建订单…' : '创建订单' }}</button>
+      </template>
+
+      <template v-else>
+        <div class="order-info">
+          <p>订单号：<span>{{ order.order_no }}</span></p>
+          <p>支付方式：<span>{{ methodLabel(order.payment_method) }}</span></p>
+          <p>订单状态：<span :class="order.status">{{ statusText }}</span></p>
+          <p v-if="order.status==='pending'">剩余时间：<span>{{ countdown }}</span></p>
         </div>
 
-        <div v-if="method === 'usdt'" class="pre-address">
-          <span>USDT 收款地址（TRC20）</span>
-          <div class="address-box">
-            <span>{{ usdtAddress }}</span>
-            <button @click="copyAddress">复制</button>
-          </div>
-          <p class="payment-tip warning">
-            请使用 TRC20 网络转账。创建订单后，请按订单显示的金额付款。
-          </p>
+        <div v-if="order.status==='pending' && order.payment_method==='wechat'" class="payment-content">
+          <h3>微信支付</h3>
+          <img class="qr" :src="paymentConfig.wechat.qr" alt="微信收款二维码">
+        </div>
+        <div v-else-if="order.status==='pending' && order.payment_method==='alipay'" class="payment-content">
+          <h3>支付宝</h3>
+          <img class="qr" :src="paymentConfig.alipay.qr" alt="支付宝收款二维码">
+        </div>
+        <div v-else-if="order.status==='pending' && order.payment_method==='usdt'" class="payment-content">
+          <h3>USDT TRC20</h3>
+          <p class="amount">{{ order.amount }} USDT</p>
+          <p class="address">{{ order.payment?.address || usdtAddress }}</p>
+          <button class="secondary" @click="copy(order.payment?.address || usdtAddress)">复制收款地址</button>
         </div>
 
-        <div v-if="error" class="error">{{ error }}</div>
-
-        <button class="pay-btn" :disabled="loading" @click="createOrder">
-          {{ loading ? '正在创建订单...' : '创建支付订单' }}
-        </button>
-
-        <p class="notice">
-          微信、支付宝和 USDT 均采用人工核对。提交付款后，请等待管理员确认。
-        </p>
-      </div>
-
-      <div v-else class="payment-area">
-        <div class="order-bar">
-          <div>
-            <span>订单号</span>
-            <b>{{ order.order_no }}</b>
-          </div>
-          <div>
-            <span>状态</span>
-            <b :class="order.status">{{ statusText }}</b>
-          </div>
+        <div v-if="order.status==='paid'" class="success">
+          <h3>付款已确认</h3>
+          <button class="primary" @click="getLicense">获取授权</button>
+          <pre v-if="license">{{ license }}</pre>
         </div>
+        <button v-if="order.status==='pending'" class="secondary refresh" :disabled="loading" @click="checkOrder">查询订单状态</button>
+        <button class="secondary refresh" @click="emit('close')">关闭</button>
+      </template>
 
-        <div v-if="order.status === 'pending'" class="countdown-row">
-          <span>支付剩余时间</span>
-          <strong :class="{ warning: remainingSeconds <= 300 }">
-            {{ countdownText }}
-          </strong>
-        </div>
-
-        <div class="payment-content">
-          <template v-if="order.status === 'pending' && order.payment_method === 'usdt'">
-            <p class="payment-title">USDT 支付</p>
-
-            <div class="network-row">
-              <span>支付网络</span>
-              <strong>TRC20</strong>
-            </div>
-
-            <div class="amount-box">
-              <span>应付金额</span>
-              <strong>{{ order.amount }} {{ order.currency || 'USDT' }}</strong>
-            </div>
-
-            <div class="address-section">
-              <span class="field-label">USDT 收款地址</span>
-              <div class="address-box">
-                <span>{{ usdtAddress }}</span>
-                <button @click="copyAddress">复制地址</button>
-              </div>
-            </div>
-
-            <p class="payment-tip warning">
-              请务必使用 TRC20 网络，并核对收款地址和转账金额。转账后请提交交易哈希，等待人工核对。
-            </p>
-          </template>
-
-          <template v-else-if="order.status === 'pending'">
-            <p class="payment-title">
-              请使用{{ currentPaymentName }}完成付款
-            </p>
-
-            <div v-if="currentPaymentQr" class="qr-box">
-              <img :src="currentPaymentQr" :alt="currentPaymentName">
-            </div>
-
-            <div class="amount-box">
-              <span>应付金额</span>
-              <strong>{{ order.amount }} {{ order.currency || 'CNY' }}</strong>
-            </div>
-
-            <p class="payment-tip">
-              请使用对应支付方式付款。付款后等待管理员人工核对。
-            </p>
-          </template>
-
-          <template v-else-if="order.status === 'expired'">
-            <div class="expired-box">
-              <strong>订单已过期</strong>
-              <span>本订单支付时间已结束，请重新创建订单。</span>
-            </div>
-          </template>
-
-          <template v-else-if="order.status === 'cancelled'">
-            <div class="expired-box">
-              <strong>订单已取消</strong>
-              <span>该订单无法继续支付，请重新创建订单。</span>
-            </div>
-          </template>
-
-          <template v-else-if="order.status === 'paid'">
-            <div v-if="license" class="license-box">
-              <div class="success-icon">✓</div>
-              <strong>付款已确认</strong>
-              <span>授权信息已生成</span>
-
-              <div class="license-status">
-                <span>授权状态</span>
-                <b>{{ license.status === 'active' ? '已激活' : license.status }}</b>
-              </div>
-
-              <div class="license-key">
-                <div>
-                  <span>EA 授权码</span>
-                  <strong>{{ license.license_key }}</strong>
-                </div>
-                <button @click="copyLicense">复制</button>
-              </div>
-
-              <div class="license-info">
-                <div><span>产品</span><b>{{ license.product_name }}</b></div>
-                <div><span>授权方式</span><b>单账户授权</b></div>
-                <div><span>支持平台</span><b>{{ product.platform }}</b></div>
-              </div>
-
-              <p class="payment-tip">
-                请保存授权码，安装 EA 后使用授权码激活。
-              </p>
-            </div>
-
-            <div v-else class="success-box">
-              <strong>付款已确认</strong>
-              <span>正在获取授权信息，请稍后重试。</span>
-              <button class="retry-btn" @click="getLicense">重新获取授权</button>
-            </div>
-          </template>
-        </div>
-
-        <div v-if="order.status !== 'paid'" class="status-row">
-          <span class="status-dot" :class="order.status"></span>
-          <span>{{ statusText }}</span>
-        </div>
-
-        <button
-          v-if="order.status === 'pending'"
-          class="check-btn"
-          :disabled="checking || pollingActive"
-          @click="checkPayment"
-        >
-          {{ checking ? '正在查询...' : pollingActive ? '正在自动查询审核状态...' : '我已完成支付' }}
-        </button>
-
-        <button
-          v-if="order.status === 'expired' || order.status === 'cancelled'"
-          class="check-btn"
-          @click="resetOrder"
-        >
-          重新创建订单
-        </button>
-
-        <button
-          v-if="order.status === 'paid' && license"
-          class="check-btn"
-          @click="$emit('close')"
-        >
-          完成
-        </button>
-
-        <div v-if="order.status === 'pending'" class="proof-area">
-          <label for="payment-reference">付款交易单号 / USDT 交易哈希</label>
-          <input
-            id="payment-reference"
-            v-model="paymentReference"
-            maxlength="200"
-            placeholder="填写付款凭证编号或交易哈希"
-          >
-
-          <label for="payment-proof-url">付款凭证图片链接（选填）</label>
-          <input
-            id="payment-proof-url"
-            v-model="paymentProofUrl"
-            maxlength="1000"
-            placeholder="https://..."
-          >
-
-          <button
-            class="proof-btn"
-            :disabled="submittingProof"
-            @click="submitPaymentProof"
-          >
-            {{ submittingProof ? '正在提交...' : '提交付款凭证供人工核对' }}
-          </button>
-        </div>
-
-        <p v-if="error" class="error">{{ error }}</p>
-
-        <p v-if="order.status === 'pending'" class="notice">
-          订单状态由服务器确认。提交凭证或查询状态不会自动认定付款成功；管理员核对后才会确认订单。
-        </p>
-      </div>
+      <p v-if="error" class="error">{{ error }}</p>
+      <p v-if="notice" class="notice">{{ notice }}</p>
     </section>
   </div>
 </template>
 
 <script setup>
-import { computed, ref, onBeforeUnmount } from 'vue'
-import { paymentConfig } from '../data/paymentConfig'
+import { computed, onBeforeUnmount, ref } from 'vue'
+import paymentConfig from '../data/paymentConfig.js'
 
-const props = defineProps({
-  product: { type: Object, required: true }
-})
-
-defineEmits(['close', 'created'])
-
+const props = defineProps({ product: { type: Object, required: true } })
+const emit = defineEmits(['close', 'created'])
 const API = 'https://lozeno-api.aaa375750526.workers.dev'
 const USDT_ADDRESS = 'TLuLF3VibWGjdVWpue9huxbgvkx2YWgzky'
-
-const loading = ref(false)
-const checking = ref(false)
-const pollingActive = ref(false)
-const submittingProof = ref(false)
-const error = ref('')
-const order = ref(null)
-const license = ref(null)
+const USDT_TO_CNY_RATE = 7
+const methods = [
+  { value: 'wechat', label: '微信支付' },
+  { value: 'alipay', label: '支付宝' },
+  { value: 'usdt', label: 'USDT TRC20' }
+]
 const method = ref('wechat')
-const remainingSeconds = ref(0)
-const paymentReference = ref('')
-const paymentProofUrl = ref('')
-
-const paymentMethods = paymentConfig
-const usdtAddress = computed(
-  () => paymentConfig?.usdt?.address || USDT_ADDRESS
-)
-
-const currentPaymentName = computed(
-  () => paymentMethods?.[order.value?.payment_method]?.name || order.value?.payment_method || '支付方式'
-)
-
-const currentPaymentQr = computed(
-  () => paymentMethods?.[order.value?.payment_method]?.qr || ''
-)
-
-let timer = null
+const order = ref(null)
+const loading = ref(false)
+const error = ref('')
+const notice = ref('')
+const license = ref('')
+const countdown = ref('24:00:00')
 let pollTimer = null
-let expiryCheckStarted = false
+let countdownTimer = null
+let expiresAt = 0
 
-const statusText = computed(() => {
-  if (order.value?.status === 'paid') return '付款已确认'
-  if (order.value?.status === 'cancelled') return '订单已取消'
-  if (order.value?.status === 'expired') return '订单已过期'
-  return '等待人工核对'
+const usdtAddress = paymentConfig.usdt?.address || USDT_ADDRESS
+const displayPrice = computed(() => {
+  const currentMethod = order.value?.payment_method || method.value
+  return currentMethod === 'usdt'
+    ? `${Number(props.product.price).toFixed(2)} USDT`
+    : `¥${(Number(props.product.price) * USDT_TO_CNY_RATE).toFixed(2)}`
 })
+const statusText = computed(() => ({
+  pending: '等待复核',
+  paid: '已确认付款',
+  cancelled: '已取消',
+  expired: '已过期'
+}[order.value?.status] || order.value?.status || '未知'))
 
-const countdownText = computed(() => {
-  const total = Math.max(0, remainingSeconds.value)
-  const h = Math.floor(total / 3600).toString().padStart(2, '0')
-  const m = Math.floor((total % 3600) / 60).toString().padStart(2, '0')
-  const s = (total % 60).toString().padStart(2, '0')
-  return `${h}:${m}:${s}`
-})
-
-function stopPolling() {
-  clearInterval(pollTimer)
-  pollTimer = null
-  pollingActive.value = false
+function methodLabel(value) {
+  return methods.find(m => m.value === value)?.label || value
 }
 
-function stopCountdown() {
-  clearInterval(timer)
-  timer = null
-}
-
-function startCountdown(expiresAt) {
-  stopCountdown()
-  expiryCheckStarted = false
-
-  if (!expiresAt) {
-    remainingSeconds.value = 24 * 60 * 60
-    return
-  }
-
-  const endTime = new Date(expiresAt).getTime()
-
-  function update() {
-    const seconds = Math.max(0, Math.ceil((endTime - Date.now()) / 1000))
-    remainingSeconds.value = seconds
-
-    if (seconds <= 0) {
-      stopCountdown()
-
-      if (!expiryCheckStarted && order.value?.status === 'pending') {
-        expiryCheckStarted = true
-        fetchOrderStatus(false)
-      }
-    }
-  }
-
-  update()
-
-  if (remainingSeconds.value > 0) {
-    timer = setInterval(update, 1000)
-  }
-}
-
-function startPolling() {
-  stopPolling()
-
-  if (!order.value?.order_no || order.value.status !== 'pending') return
-
-  pollingActive.value = true
-
-  pollTimer = setInterval(async () => {
-    if (!order.value?.order_no || order.value.status !== 'pending') {
-      stopPolling()
-      return
-    }
-
-    await fetchOrderStatus(false)
-  }, 3000)
+async function request(path, options = {}) {
+  const response = await fetch(`${API}${path}`, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }
+  })
+  const data = await response.json().catch(() => ({}))
+  if (!response.ok || data.error) throw new Error(data.error || data.detail || '请求失败，请稍后重试')
+  return data
 }
 
 async function createOrder() {
-  if (loading.value) return
-
   loading.value = true
   error.value = ''
-  license.value = null
-
+  notice.value = ''
   try {
-    const res = await fetch(`${API}/api/orders`, {
+    const data = await request('/api/orders', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        product_id: Number(props.product.id),
+        product_id: props.product.id,
+        product_name: props.product.name,
         payment_method: method.value
       })
     })
-
-    const data = await res.json()
-
-    if (!res.ok) throw new Error(data.detail || '订单创建失败')
-
     order.value = data.order || data
-
-    if (!order.value?.order_no) {
-      throw new Error('订单已返回，但缺少订单号，请检查后端响应格式')
-    }
-
-    startCountdown(order.value.expires_at)
+    emit('created', order.value)
+    startTimers()
   } catch (e) {
-    error.value = e.message || '订单创建失败，请稍后重试'
+    error.value = e.message || '创建订单失败'
   } finally {
     loading.value = false
   }
 }
 
-async function fetchOrderStatus(showAlert = false) {
-  if (!order.value?.order_no || checking.value || order.value.status !== 'pending') return
-
-  checking.value = true
+async function checkOrder() {
+  if (!order.value?.order_no) return
+  loading.value = true
   error.value = ''
-
   try {
-    const res = await fetch(
-      `${API}/api/orders/${encodeURIComponent(order.value.order_no)}`
-    )
-
-    const data = await res.json()
-
-    if (!res.ok) throw new Error(data.detail || '订单查询失败')
-
+    const data = await request(`/api/orders/${encodeURIComponent(order.value.order_no)}`)
     order.value = data.order || data
-
-    if (order.value.status === 'paid') {
-      stopCountdown()
-      stopPolling()
-      await getLicense()
-
-      if (showAlert && !license.value) {
-        error.value = '付款已确认，但授权暂时获取失败，请重试获取授权'
-      }
-    } else if (order.value.status === 'expired' || order.value.status === 'cancelled') {
-      stopCountdown()
-      stopPolling()
-
-      if (showAlert) error.value = '订单已结束，请重新创建订单'
-    } else if (remainingSeconds.value <= 0 && !expiryCheckStarted) {
-      expiryCheckStarted = true
-      stopCountdown()
-    }
+    if (order.value.status !== 'pending') stopTimers()
+    if (order.value.status === 'paid') notice.value = '付款已由管理员确认。'
   } catch (e) {
-    if (showAlert) error.value = e.message || '暂时无法查询订单状态'
+    error.value = e.message || '查询订单失败'
   } finally {
-    checking.value = false
+    loading.value = false
   }
 }
 
-async function checkPayment() {
-  if (!order.value?.order_no || checking.value || order.value.status !== 'pending') return
-
-  await fetchOrderStatus(true)
-
-  if (order.value?.status === 'pending') startPolling()
+function startTimers() {
+  stopTimers()
+  const expiry = order.value?.expires_at ? new Date(order.value.expires_at).getTime() : Date.now() + 24 * 60 * 60 * 1000
+  expiresAt = expiry
+  updateCountdown()
+  countdownTimer = setInterval(updateCountdown, 1000)
+  pollTimer = setInterval(checkOrder, 10000)
 }
 
-async function submitPaymentProof() {
-  if (!order.value?.order_no || submittingProof.value) return
-
-  const reference = paymentReference.value.trim()
-  const proofUrl = paymentProofUrl.value.trim()
-
-  if (!reference && !proofUrl) {
-    error.value = '请至少填写付款交易单号、交易哈希或付款凭证链接'
-    return
+function updateCountdown() {
+  const seconds = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000))
+  const h = String(Math.floor(seconds / 3600)).padStart(2, '0')
+  const m = String(Math.floor(seconds % 3600 / 60)).padStart(2, '0')
+  const s = String(seconds % 60).padStart(2, '0')
+  countdown.value = `${h}:${m}:${s}`
+  if (!seconds) {
+    clearInterval(countdownTimer)
+    countdownTimer = null
   }
+}
 
-  if (proofUrl && !/^https:\/\/\S+$/i.test(proofUrl)) {
-    error.value = '付款凭证链接必须以 https:// 开头'
-    return
-  }
-
-  submittingProof.value = true
-  error.value = ''
-
-  try {
-    const res = await fetch(
-      `${API}/api/orders/${encodeURIComponent(order.value.order_no)}/payment-proof`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          payment_reference: reference,
-          payment_proof_url: proofUrl
-        })
-      }
-    )
-
-    const data = await res.json()
-
-    if (!res.ok) throw new Error(data.detail || '付款凭证提交失败')
-
-    error.value = ''
-    await fetchOrderStatus(false)
-    startPolling()
-  } catch (e) {
-    error.value = e.message || '付款凭证提交失败，请稍后重试'
-  } finally {
-    submittingProof.value = false
-  }
+function stopTimers() {
+  if (pollTimer) clearInterval(pollTimer)
+  if (countdownTimer) clearInterval(countdownTimer)
+  pollTimer = null
+  countdownTimer = null
 }
 
 async function getLicense() {
   if (!order.value?.order_no) return
-
+  loading.value = true
+  error.value = ''
   try {
-    const res = await fetch(
-      `${API}/api/orders/${encodeURIComponent(order.value.order_no)}/license`
-    )
-
-    const data = await res.json()
-
-    if (!res.ok) throw new Error(data.detail || '授权码暂时无法获取')
-
-    license.value = data.license || data
-    error.value = ''
+    const data = await request(`/api/orders/${encodeURIComponent(order.value.order_no)}/license`)
+    license.value = typeof data === 'string' ? data : JSON.stringify(data, null, 2)
   } catch (e) {
-    license.value = null
-    error.value = e.message || '授权码获取失败，请稍后重试'
+    error.value = e.message || '获取授权失败'
+  } finally {
+    loading.value = false
   }
 }
 
-function resetOrder() {
-  stopCountdown()
-  stopPolling()
-  order.value = null
-  license.value = null
-  remainingSeconds.value = 0
-  paymentReference.value = ''
-  paymentProofUrl.value = ''
-  expiryCheckStarted = false
-  error.value = ''
-}
-
-async function copyText(value, successMessage) {
+async function copy(value) {
   try {
     await navigator.clipboard.writeText(value)
-    alert(successMessage)
+    notice.value = '已复制'
   } catch {
-    error.value = `复制失败，请手动复制：${value}`
+    notice.value = `请手动复制：${value}`
   }
 }
 
-function copyAddress() {
-  return copyText(usdtAddress.value, 'USDT TRC20 收款地址已复制')
-}
-
-function copyLicense() {
-  if (!license.value?.license_key) return
-  return copyText(license.value.license_key, 'EA 授权码已复制')
-}
-
-onBeforeUnmount(() => {
-  stopCountdown()
-  stopPolling()
-})
+onBeforeUnmount(stopTimers)
 </script>
 
 <style scoped>
-.modal-mask{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.72);backdrop-filter:blur(8px)}
-.purchase-modal{position:relative;width:min(500px,100%);max-height:90vh;overflow:auto;padding:28px;background:var(--表面卡片背景色,#141722);border:1px solid var(--边框线条颜色,#222630);border-radius:16px;box-shadow:0 24px 80px rgba(0,0,0,.5)}
-.close-btn{position:absolute;top:14px;right:16px;width:32px;height:32px;border:0;background:transparent;color:var(--次要灰色文字,#848e9c);font-size:26px;line-height:1;cursor:pointer}.close-btn:hover{color:#fff}
-.modal-head{display:flex;gap:16px;align-items:center;padding-right:30px}.modal-icon{width:68px;height:68px;flex-shrink:0;overflow:hidden;border-radius:12px;background:#1b1e26}.modal-icon img{width:100%;height:100%;object-fit:cover;display:block}.modal-head h2{font-size:20px;font-weight:800;color:var(--主要文字颜色,#fff)}.modal-head p{margin-top:5px;font-size:12px;line-height:1.5;color:var(--次要灰色文字,#848e9c)}
-.price-row{display:flex;align-items:center;justify-content:space-between;margin-top:26px;padding-bottom:18px;border-bottom:1px solid var(--边框线条颜色,#222630)}.price-row span{font-size:13px;color:var(--次要灰色文字,#848e9c)}.price-row strong{font-size:28px;font-weight:800;color:#f0c040}
-.info-list{display:flex;flex-direction:column;gap:14px;padding:20px 0}.info-list div{display:flex;justify-content:space-between;gap:16px;font-size:13px}.info-list span{color:var(--次要灰色文字,#848e9c)}.info-list b{font-weight:600;color:var(--主要文字颜色,#fff);text-align:right}
-.methods{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:16px 0}.method{height:52px;border:1px solid #2b3140;border-radius:9px;background:#11141b;color:#848e9c;cursor:pointer}.method span{display:block;font-size:11px;margin-bottom:3px}.method strong{font-size:12px}.method.active{border-color:var(--主色调蓝色,#315bff);background:rgba(49,91,255,.1);color:#fff}
-.order-bar{display:flex;justify-content:space-between;gap:16px;margin-top:4px;padding:12px 14px;background:var(--输入框背景色,#1b1e26);border-radius:8px}.order-bar div{display:flex;flex-direction:column;gap:4px;min-width:0}.order-bar span{font-size:10px;color:var(--次要灰色文字,#848e9c)}.order-bar b{font-size:11px;color:#fff;overflow-wrap:anywhere}.order-bar b.pending{color:#eab308}.order-bar b.paid{color:#0ecb81}.order-bar b.cancelled,.order-bar b.expired{color:#f6465d}
-.countdown-row{display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding:10px 14px;background:rgba(234,179,8,.07);border:1px solid rgba(234,179,8,.18);border-radius:8px}.countdown-row span{font-size:12px;color:#848e9c}.countdown-row strong{font-size:18px;font-weight:800;color:#eab308;font-variant-numeric:tabular-nums}.countdown-row strong.warning{color:#f6465d}
-.payment-content{margin-top:18px;text-align:center}.payment-title{font-size:13px;color:#cbd2df}.qr-box{width:210px;height:210px;margin:14px auto 10px;padding:9px;background:#fff;border-radius:9px}.qr-box img{width:100%;height:100%;object-fit:contain;display:block}.payment-tip{margin-top:10px;font-size:11px;line-height:1.7;color:var(--次要灰色文字,#848e9c)}.warning{color:#eab308}
-.network-row,.amount-box{display:flex;justify-content:space-between;gap:12px;margin-top:10px;padding:12px 14px;background:#11141b;border-radius:8px;font-size:12px}.network-row span,.amount-box span{color:#848e9c}.network-row strong{color:#50e6d2}.amount-box strong{color:#f0c040;font-size:15px}
-.address-section{margin-top:14px;text-align:left}.field-label{font-size:12px;color:#848e9c}
-.address-box{display:flex;align-items:center;gap:8px;margin-top:8px;padding:10px;background:#11141b;border:1px solid #2b3140;border-radius:8px;text-align:left}.address-box span{flex:1;min-width:0;color:#dce2ec;font-size:11px;line-height:1.6;overflow-wrap:anywhere;user-select:text}.address-box button{flex-shrink:0;padding:7px 10px;border:1px solid #315bff;border-radius:6px;background:rgba(49,91,255,.1);color:#8ba5ff;font-size:11px;cursor:pointer}.address-box button:hover{background:rgba(49,91,255,.2);color:#fff}
-.pre-address{padding:12px;background:#11141b;border:1px solid #2b3140;border-radius:8px}.pre-address>span{font-size:12px;color:#cbd2df}
-.status-row{display:flex;align-items:center;justify-content:center;gap:7px;margin-top:18px;color:#b8c2d2;font-size:12px}.status-dot{width:7px;height:7px;border-radius:50%;background:#eab308}.status-dot.paid{background:#0ecb81}.status-dot.cancelled,.status-dot.expired{background:#f6465d}
-.success-box,.expired-box{display:flex;flex-direction:column;align-items:center;gap:8px;padding:28px 20px;border-radius:10px;background:#11141b;border:1px solid #2b3140}.success-box strong{font-size:16px;color:#0ecb81}.success-box span,.expired-box span{font-size:12px;color:#848e9c}.expired-box strong{font-size:16px;color:#f6465d}
-.license-box{padding:22px 16px;border-radius:10px;background:#11141b;border:1px solid rgba(14,203,129,.35)}.success-icon{display:flex;align-items:center;justify-content:center;width:38px;height:38px;margin:0 auto 10px;border-radius:50%;background:rgba(14,203,129,.12);border:1px solid rgba(14,203,129,.35);color:#0ecb81;font-size:22px;font-weight:800}.license-box>strong{display:block;font-size:18px;color:#0ecb81}.license-box>span{display:block;margin-top:5px;font-size:12px;color:#848e9c}
-.license-status{display:flex;align-items:center;justify-content:space-between;margin-top:18px;padding:10px 12px;border-radius:7px;background:#151923}.license-status span{font-size:11px;color:#848e9c}.license-status b{font-size:11px;color:#0ecb81}
-.license-key{display:flex;align-items:center;gap:8px;margin-top:8px;padding:12px;background:#0b0d12;border:1px solid #2b3140;border-radius:8px;text-align:left}.license-key>div{flex:1;min-width:0}.license-key span{display:block;font-size:10px;color:#848e9c;margin-bottom:5px}.license-key strong{display:block;color:#fff;font-size:13px;line-height:1.5;overflow-wrap:anywhere}.license-key button{flex-shrink:0;padding:7px 10px;border:1px solid #315bff;border-radius:6px;background:rgba(49,91,255,.1);color:#5f82ff;font-size:11px;cursor:pointer}
-.license-info{display:flex;flex-direction:column;gap:9px;margin-top:14px}.license-info div{display:flex;justify-content:space-between;gap:10px;font-size:11px}.license-info span{color:#848e9c}.license-info b{color:#dce2ec;font-weight:600}
-.pay-btn,.check-btn,.proof-btn,.retry-btn{width:100%;min-height:44px;border:0;border-radius:9px;background:var(--主色调蓝色,#315bff);color:#fff;font-size:13px;font-weight:700;cursor:pointer;transition:background .2s}.pay-btn,.check-btn{height:46px;font-size:14px}.pay-btn:hover,.check-btn:hover,.proof-btn:hover,.retry-btn:hover{background:var(--主色调悬停色,#4169ff)}.pay-btn:disabled,.check-btn:disabled,.proof-btn:disabled{opacity:.6;cursor:not-allowed}.check-btn{margin-top:12px}.retry-btn{margin-top:8px}
-.proof-area{display:flex;flex-direction:column;gap:8px;margin-top:16px;padding:14px;background:#11141b;border:1px solid #2b3140;border-radius:9px;text-align:left}.proof-area label{font-size:11px;color:#aab4c4}.proof-area input{width:100%;min-width:0;padding:10px;border:1px solid #2b3140;border-radius:7px;outline:none;background:#0b0d12;color:#fff;font-size:12px}.proof-area input:focus{border-color:#315bff}.proof-btn{margin-top:4px}
-.notice{margin-top:10px;color:var(--次要灰色文字,#848e9c);font-size:11px;line-height:1.7;text-align:center}.error{margin-top:10px;padding:10px 12px;border-radius:7px;background:rgba(246,70,93,.1);color:#f6465d;font-size:12px}.create-area{padding-top:2px}
-@media(max-width:560px){.purchase-modal{padding:22px}.qr-box{width:190px;height:190px}.address-box{align-items:flex-start}.address-box button{padding:7px}}
+.mask{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;background:#000b;backdrop-filter:blur(5px)}.modal{position:relative;width:100%;max-width:440px;max-height:90vh;overflow:auto;padding:30px;background:#141722;border:1px solid #222630;border-radius:14px;color:#eef1f8;box-shadow:0 20px 70px #0008}.close{position:absolute;right:16px;top:12px;border:0;background:none;color:#848e9c;font-size:28px;cursor:pointer}.modal h2{margin:0 25px 14px 0;font-size:20px}.price{margin:10px 0 22px;color:#fff;font-size:28px;font-weight:700}.methods{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:18px}.methods button,.secondary{padding:10px 8px;border:1px solid #303544;border-radius:7px;background:#1b1e26;color:#c7ccda;cursor:pointer}.methods button.active{border-color:#315bff;color:#fff;background:#202b4d}.primary{width:100%;padding:12px;border:0;border-radius:7px;background:#315bff;color:#fff;font-size:15px;font-weight:600;cursor:pointer}.primary:hover{background:#4169ff}.primary:disabled,.secondary:disabled{opacity:.6;cursor:not-allowed}.usdt-preview,.order-info{margin:16px 0;padding:14px;background:#1b1e26;border-radius:8px}.usdt-preview p,.order-info p{margin:7px 0;font-size:13px;color:#aab2c2;overflow-wrap:anywhere}.order-info span{color:#eef1f8}.pending{color:#f0b94b!important}.paid{color:#43d49a!important}.cancelled,.expired{color:#f07878!important}.payment-content{display:flex;flex-direction:column;align-items:center;gap:12px;margin:18px 0}.payment-content h3,.success h3{margin:0;font-size:16px}.qr{display:block;width:220px;height:220px;max-width:100%;object-fit:contain;background:#fff;border-radius:6px}.address{max-width:100%;overflow-wrap:anywhere;color:#aeb8cb;font-size:12px;line-height:1.6}.amount{font-size:20px;font-weight:700;color:#fff}.secondary{width:100%;margin-top:8px}.refresh{margin-top:12px}.error{margin-top:14px;color:#ff7777;font-size:13px;overflow-wrap:anywhere}.notice{margin-top:12px;color:#8eafff;font-size:13px;overflow-wrap:anywhere}.success{margin:18px 0}.success .primary{margin-top:12px}pre{white-space:pre-wrap;overflow-wrap:anywhere;padding:12px;background:#1b1e26;border-radius:7px;font-size:12px}@media(max-width:480px){.modal{padding:24px 18px}.qr{width:200px;height:200px}}
 </style>
