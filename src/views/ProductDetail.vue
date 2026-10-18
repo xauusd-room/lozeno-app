@@ -1,3 +1,4 @@
+
 <template>
   <main class="page page-container">
     <ProductHero :product="product" @purchase="handlePurchase" />
@@ -36,7 +37,9 @@ const showAuth = ref(false)
 const showPurchase = ref(false)
 const checkingAuth = ref(false)
 
-const product = computed(() => eaProducts[route.query.id || '1'] || eaProducts[1])
+const product = computed(
+  () => eaProducts[route.query.id || '1'] || eaProducts[1]
+)
 
 document.title = `${product.value.name} | LOZENO`
 
@@ -68,9 +71,9 @@ function onAuthenticated(user) {
 }
 
 function orderCreated(order) {
+  // 订单创建成功后保留购买弹窗，
+  // 由 PurchaseModal 显示订单号和支付界面。
   console.log('订单创建成功:', order)
-  showPurchase.value = false
-  alert(`订单创建成功\n订单号：${order.order_no}`)
 }
 </script>
 
