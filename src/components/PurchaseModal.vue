@@ -1,3 +1,4 @@
+
 <template>
   <div class="modal-mask">
     <section class="purchase-modal">
@@ -74,12 +75,12 @@
             "
           >
             <p class="payment-title">
-              请使用{{ paymentMethods[order.payment_method].name }}扫码支付
+              请使用{{ paymentMethods[order.payment_method]?.name || order.payment_method }}扫码支付
             </p>
             <div class="qr-box">
               <img
-                :src="paymentMethods[order.payment_method].qr"
-                :alt="paymentMethods[order.payment_method].name"
+                :src="paymentMethods[order.payment_method]?.qr"
+                :alt="paymentMethods[order.payment_method]?.name || '支付二维码'"
               >
             </div>
           </template>
@@ -175,11 +176,14 @@
         <button
           v-if="order.status === 'pending'"
           class="check-btn"
+          :disabled="checking"
+          @click="checkPayment"
+        >
           {{ checking ? '正在查询...' : '我已完成支付' }}
         </button>
 
         <button
-          v-if="order.status === 'expired'"
+          v-if="order.status === 'expired' || order.status === 'cancelled'"
           class="check-btn"
           @click="resetOrder"
         >
@@ -195,6 +199,7 @@
         </button>
 
         <p v-if="error" class="error">{{ error }}</p>
+        <p v-if="notice" class="notice">{{ notice }}</p>
       </div>
     </section>
   </div>
@@ -220,8 +225,8 @@ const ORDER_DURATION = 24 * 60 * 60 * 1000
 
 const loading = ref(false)
 const checking = ref(false)
-const pollingActive = ref(false)
 const error = ref('')
+const notice = ref('')
 const order = ref(null)
 const license = ref(null)
 const method = ref('wechat')
@@ -230,7 +235,7 @@ const remainingSeconds = ref(0)
 const paymentMethods = paymentConfig
 
 let timer = null
-let pollTimer = null
+let noticeTimer = null
 
 const displayAmount = computed(() => {
   const price = Number(
@@ -308,15 +313,11 @@ async function apiRequest(path, options = {}) {
   return data
 }
 
-function stopPolling() {
-  clearInterval(pollTimer)
-  pollTimer = null
-  pollingActive.value = false
-}
-
 function stopCountdown() {
-  clearInterval(timer)
-  timer = null
+  if (timer) {
+    clearInterval(timer)
+    timer = null
+  }
 }
 
 function startCountdown(expiresAt) {
@@ -331,20 +332,14 @@ function startCountdown(expiresAt) {
     : Date.now() + ORDER_DURATION
 
   function update() {
-    const seconds = Math.max(
+    remainingSeconds.value = Math.max(
       0,
       Math.ceil((endTime - Date.now()) / 1000)
     )
 
-    remainingSeconds.value = seconds
-
-    if (seconds <= 0) {
+    // 倒计时结束只停止计时，不自动查询或修改订单状态。
+    if (remainingSeconds.value <= 0) {
       stopCountdown()
-
-      // 倒计时结束后只查询服务器状态，不由前端擅自修改订单状态。
-      if (order.value?.status === 'pending') {
-        fetchOrderStatus(true)
-      }
     }
   }
 
@@ -355,23 +350,17 @@ function startCountdown(expiresAt) {
   }
 }
 
-function startPolling() {
-  stopPolling()
+function showNotice(message) {
+  notice.value = message
 
-  if (!order.value?.order_no || order.value.status !== 'pending') {
-    return
+  if (noticeTimer) {
+    clearTimeout(noticeTimer)
   }
 
-  pollingActive.value = true
-
-  pollTimer = setInterval(async () => {
-    if (!order.value?.order_no || order.value.status !== 'pending') {
-      stopPolling()
-      return
-    }
-
-    await fetchOrderStatus(false)
-  }, 3000)
+  noticeTimer = setTimeout(() => {
+    notice.value = ''
+    noticeTimer = null
+  }, 2500)
 }
 
 async function createOrder() {
@@ -379,6 +368,7 @@ async function createOrder() {
 
   loading.value = true
   error.value = ''
+  notice.value = ''
   license.value = null
 
   try {
@@ -403,21 +393,19 @@ async function createOrder() {
 
     order.value = createdOrder
 
-    // 优先采用后端过期时间，不覆盖服务器返回的数据。
     startCountdown(
       order.value.expires_at ||
       new Date(Date.now() + ORDER_DURATION).toISOString()
     )
 
-    // 通知父组件订单创建成功。
     emit('created', order.value)
 
+    // 订单创建后不启动轮询。
+    // 只有用户主动点击“我已完成支付”才查询状态。
     if (order.value.status === 'paid') {
-  stopCountdown()
-  await getLicense()
-} else {
-  stopPolling()
-}
+      stopCountdown()
+      await getLicense()
+    }
   } catch (e) {
     error.value = e.message || '订单创建失败，请稍后重试'
   } finally {
@@ -425,7 +413,7 @@ async function createOrder() {
   }
 }
 
-async function fetchOrderStatus(showError = false) {
+async function fetchOrderStatus() {
   if (
     !order.value?.order_no ||
     checking.value ||
@@ -437,10 +425,8 @@ async function fetchOrderStatus(showError = false) {
   }
 
   checking.value = true
-
-  if (showError) {
-    error.value = ''
-  }
+  error.value = ''
+  notice.value = ''
 
   try {
     const data = await apiRequest(
@@ -455,13 +441,7 @@ async function fetchOrderStatus(showError = false) {
 
     if (order.value.status === 'paid') {
       stopCountdown()
-      stopPolling()
       await getLicense()
-
-      if (!license.value && showError && !error.value) {
-        error.value = '支付已确认，但授权码暂时无法获取，请稍后重试'
-      }
-
       return
     }
 
@@ -470,24 +450,17 @@ async function fetchOrderStatus(showError = false) {
       order.value.status === 'cancelled'
     ) {
       stopCountdown()
-      stopPolling()
 
-      if (showError) {
-        error.value = order.value.status === 'expired'
-          ? '订单已过期，请重新创建订单'
-          : '订单已取消，无法继续支付'
-      }
+      error.value = order.value.status === 'expired'
+        ? '订单已过期，请重新创建订单'
+        : '订单已取消，无法继续支付'
 
       return
     }
 
-    if (showError && remainingSeconds.value <= 0) {
-      error.value = '尚未查询到最终订单状态，请稍后重新查询'
-    }
+    showNotice('暂未查询到支付成功记录，请确认付款后重试')
   } catch (e) {
-    if (showError) {
-      error.value = e.message || '暂时无法查询订单状态'
-    }
+    error.value = e.message || '暂时无法查询订单状态，请稍后重试'
   } finally {
     checking.value = false
   }
@@ -502,8 +475,9 @@ async function checkPayment() {
     return
   }
 
-  await fetchOrderStatus(true)
+  await fetchOrderStatus()
 }
+
 async function getLicense() {
   if (!order.value?.order_no) return
 
@@ -518,6 +492,8 @@ async function getLicense() {
       license.value = null
       throw new Error('服务器暂未返回有效授权码，请稍后重试')
     }
+
+    error.value = ''
   } catch (e) {
     license.value = null
     error.value = e.message || '授权码获取失败，请稍后重试'
@@ -526,18 +502,18 @@ async function getLicense() {
 
 function resetOrder() {
   stopCountdown()
-  stopPolling()
 
   order.value = null
   license.value = null
   remainingSeconds.value = 0
   error.value = ''
+  notice.value = ''
 }
 
 async function copyAddress() {
   try {
     await navigator.clipboard.writeText(paymentConfig.usdt.address)
-    alert('USDT-TRC20 收款地址已复制')
+    showNotice('USDT-TRC20 收款地址已复制')
   } catch {
     error.value = '复制失败，请手动复制收款地址。'
   }
@@ -548,7 +524,7 @@ async function copyLicense() {
 
   try {
     await navigator.clipboard.writeText(license.value.license_key)
-    alert('EA 授权码已复制')
+    showNotice('EA 授权码已复制')
   } catch {
     error.value = '复制失败，请手动复制授权码。'
   }
@@ -556,7 +532,11 @@ async function copyLicense() {
 
 onBeforeUnmount(() => {
   stopCountdown()
-  stopPolling()
+
+  if (noticeTimer) {
+    clearTimeout(noticeTimer)
+    noticeTimer = null
+  }
 })
 </script>
 
@@ -573,8 +553,6 @@ onBeforeUnmount(() => {
 .price-row{display:flex;align-items:center;justify-content:space-between;margin-top:26px;padding-bottom:18px;border-bottom:1px solid var(--边框线条颜色,#222630)}
 .price-row span{font-size:13px;color:var(--次要灰色文字,#848e9c)}
 .price-row strong{font-size:28px;font-weight:800;color:#f0c040}
-.order-price{margin-top:14px;padding-bottom:12px}
-.order-price strong{font-size:22px}
 .info-list{display:flex;flex-direction:column;gap:14px;padding:20px 0}
 .info-list div{display:flex;justify-content:space-between;gap:16px;font-size:13px}
 .info-list span{color:var(--次要灰色文字,#848e9c)}
@@ -638,6 +616,7 @@ onBeforeUnmount(() => {
 .pay-btn:disabled,.check-btn:disabled{opacity:.6;cursor:not-allowed}
 .check-btn{margin-top:12px}
 .error{margin-top:10px;padding:10px 12px;border-radius:7px;background:rgba(246,70,93,.1);color:#f6465d;font-size:12px}
+.notice{margin-top:10px;padding:10px 12px;border-radius:7px;background:rgba(49,91,255,.1);color:#9eb2ff;font-size:12px;text-align:center}
 .create-area{padding-top:2px}
 @media(max-width:560px){
   .purchase-modal{padding:22px}
