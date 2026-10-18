@@ -57,7 +57,7 @@
 
 <script setup>
 import { computed, onBeforeUnmount, ref } from 'vue'
-import paymentConfig from '../data/paymentConfig.js'
+import { paymentConfig } from '../data/paymentConfig.js'
 
 const props = defineProps({ product: { type: Object, required: true } })
 const emit = defineEmits(['close', 'created'])
