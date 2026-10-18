@@ -1,6 +1,6 @@
 <template>
   <Teleport to="body">
-  <div class="auth-mask" @click.self="$emit('close')" @keydown.esc="$emit('close')">
+  <div class="auth-mask">
     <section class="auth-modal" role="dialog" aria-modal="true" :aria-label="mode === 'login' ? '登录 LOZENO' : '注册 LOZENO'">
       <button class="close-btn" type="button" aria-label="关闭" @click="$emit('close')">×</button>
       <div class="brand-mark">L</div>
