@@ -57,11 +57,6 @@
           </div>
         </div>
 
-        <div class="price-row order-price">
-          <span>应付金额</span>
-          <strong>{{ displayAmount }}</strong>
-        </div>
-
         <div v-if="order.status === 'pending'" class="countdown-row">
           <span>支付剩余时间</span>
           <strong :class="{ warning: remainingSeconds <= 60 }">
