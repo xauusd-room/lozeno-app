@@ -178,13 +178,7 @@
           :disabled="checking || pollingActive"
           @click="checkPayment"
         >
-          {{
-            checking
-              ? '正在查询...'
-              : pollingActive
-                ? '正在自动检查支付状态...'
-                : '我已完成支付'
-          }}
+          {{ checking ? '正在查询...' : '我已完成支付' }}
         </button>
 
         <button
