@@ -212,6 +212,7 @@
 <script setup>
 import { computed, ref, onBeforeUnmount } from 'vue'
 import { paymentConfig } from '../data/paymentConfig'
+import { getToken } from '../services/auth'
 
 const props = defineProps({
   product: {
@@ -220,7 +221,7 @@ const props = defineProps({
   }
 })
 
-defineEmits(['close', 'created'])
+const emit = defineEmits(['close', 'created'])
 
 const API = 'https://lozeno-api.aaa375750526.workers.dev'
 const EXCHANGE_RATE = 7
@@ -271,16 +272,72 @@ const countdownText = computed(() => {
   return `${hours}:${minutes}:${seconds}`
 })
 
+function authHeaders(json = false) {
+  const token = getToken()
+
+  if (!token) {
+    throw new Error('请先登录后再购买 EA')
+  }
+
+  return {
+    Accept: 'application/json',
+    ...(json ? { 'Content-Type': 'application/json' } : {}),
+    Authorization: `Bearer ${token}`
+  }
+}
+
+async function apiRequest(path, options = {}) {
+  const headers = authHeaders(Boolean(options.body))
+
+  const res = await fetch(`${API}${path}`, {
+    ...options,
+    headers: {
+      ...headers,
+      ...(options.headers || {})
+    }
+  })
+
+  const data = await res.json().catch(() => ({}))
+
+  if (res.status === 401) {
+    throw new Error('登录状态已失效，请重新登录后再操作')
+  }
+
+  if (!res.ok) {
+    const detail =
+      typeof data.detail === 'string'
+        ? data.detail
+        : typeof data.message === 'string'
+          ? data.message
+          : `请求失败（HTTP ${res.status}）`
+
+    throw new Error(detail)
+  }
+
+  return data
+}
+
 function stopPolling() {
   clearInterval(pollTimer)
   pollTimer = null
   pollingActive.value = false
 }
 
-function startCountdown(expiresAt) {
+function stopCountdown() {
   clearInterval(timer)
+  timer = null
+}
 
-  const endTime = new Date(expiresAt).getTime()
+function startCountdown(expiresAt) {
+  stopCountdown()
+
+  const parsedTime = expiresAt
+    ? new Date(expiresAt).getTime()
+    : NaN
+
+  const endTime = Number.isFinite(parsedTime)
+    ? parsedTime
+    : Date.now() + ORDER_DURATION
 
   function update() {
     const seconds = Math.max(
@@ -291,9 +348,12 @@ function startCountdown(expiresAt) {
     remainingSeconds.value = seconds
 
     if (seconds <= 0) {
-      clearInterval(timer)
-      timer = null
-      expireOrder()
+      stopCountdown()
+
+      // 倒计时结束后只查询服务器状态，不由前端擅自修改订单状态。
+      if (order.value?.status === 'pending') {
+        fetchOrderStatus(true)
+      }
     }
   }
 
@@ -323,36 +383,6 @@ function startPolling() {
   }, 3000)
 }
 
-async function expireOrder() {
-  if (!order.value || order.value.status !== 'pending') return
-
-  stopPolling()
-
-  try {
-    const res = await fetch(
-      `${API}/api/orders/${order.value.order_no}/status`,
-      {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          status: 'expired'
-        })
-      }
-    )
-
-    if (res.ok) {
-      const data = await res.json()
-      order.value = data.order || order.value
-    } else {
-      order.value.status = 'expired'
-    }
-  } catch {
-    order.value.status = 'expired'
-  }
-}
-
 async function createOrder() {
   if (loading.value) return
 
@@ -361,11 +391,8 @@ async function createOrder() {
   license.value = null
 
   try {
-    const res = await fetch(`${API}/api/orders`, {
+    const data = await apiRequest('/api/orders', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
       body: JSON.stringify({
         product_id: Number(props.product.id),
         product_name: props.product.name,
@@ -377,28 +404,29 @@ async function createOrder() {
       })
     })
 
-    const data = await res.json()
+    const createdOrder = data.order || data
 
-    if (!res.ok) {
-      throw new Error(data.detail || '订单创建失败')
+    if (!createdOrder.order_no) {
+      throw new Error('服务器未返回有效订单号，请稍后重试')
     }
 
-    order.value = data.order || data
+    order.value = createdOrder
 
-    // 前端显示 24 小时倒计时。
-    // 后端订单过期时间也应同步设置为 24 小时。
-    const expiresAt = new Date(Date.now() + ORDER_DURATION).toISOString()
+    // 优先采用后端过期时间，不覆盖服务器返回的数据。
+    startCountdown(
+      order.value.expires_at ||
+      new Date(Date.now() + ORDER_DURATION).toISOString()
+    )
 
-    order.value = {
-      ...order.value,
-      expires_at: expiresAt
+    // 通知父组件订单创建成功。
+    emit('created', order.value)
+
+    if (order.value.status === 'paid') {
+      stopCountdown()
+      await getLicense()
+    } else if (order.value.status === 'pending') {
+      startPolling()
     }
-
-    startCountdown(expiresAt)
-
-    // 通知父组件订单已创建。
-    // 保留原有 created 事件。
-    // 不改变后端订单金额和币种。
   } catch (e) {
     error.value = e.message || '订单创建失败，请稍后重试'
   } finally {
@@ -406,56 +434,67 @@ async function createOrder() {
   }
 }
 
-async function fetchOrderStatus(showAlert = false) {
+async function fetchOrderStatus(showError = false) {
   if (
     !order.value?.order_no ||
     checking.value ||
-    order.value.status !== 'pending'
+    order.value.status === 'paid' ||
+    order.value.status === 'expired' ||
+    order.value.status === 'cancelled'
   ) {
     return
   }
 
   checking.value = true
-  error.value = ''
+
+  if (showError) {
+    error.value = ''
+  }
 
   try {
-    const res = await fetch(
-      `${API}/api/orders/${order.value.order_no}`
+    const data = await apiRequest(
+      `/api/orders/${encodeURIComponent(order.value.order_no)}`
     )
 
-    const data = await res.json()
+    const updatedOrder = data.order || data
 
-    if (!res.ok) {
-      throw new Error(data.detail || '订单查询失败')
+    if (updatedOrder.order_no) {
+      order.value = updatedOrder
     }
-
-    order.value = data.order || data
 
     if (order.value.status === 'paid') {
-      clearInterval(timer)
-      timer = null
+      stopCountdown()
       stopPolling()
-
       await getLicense()
 
-      if (showAlert && !license.value && !error.value) {
-        error.value = '支付成功，但授权码暂时获取失败，请稍后重试'
+      if (!license.value && showError && !error.value) {
+        error.value = '支付已确认，但授权码暂时无法获取，请稍后重试'
       }
-    } else if (order.value.status === 'expired') {
-      clearInterval(timer)
-      timer = null
+
+      return
+    }
+
+    if (
+      order.value.status === 'expired' ||
+      order.value.status === 'cancelled'
+    ) {
+      stopCountdown()
       stopPolling()
 
-      if (showAlert) {
-        error.value = '订单已过期，请重新创建订单'
+      if (showError) {
+        error.value = order.value.status === 'expired'
+          ? '订单已过期，请重新创建订单'
+          : '订单已取消，无法继续支付'
       }
-    } else if (order.value.status === 'cancelled') {
-      clearInterval(timer)
-      timer = null
-      stopPolling()
+
+      return
+    }
+
+    if (showError && remainingSeconds.value <= 0) {
+      error.value = '尚未查询到最终订单状态，请稍后重新查询'
     }
   } catch (e) {
-    if (showAlert) {
+    if (showError) {
       error.value = e.message || '暂时无法查询订单状态'
     }
   } finally {
@@ -483,26 +522,24 @@ async function getLicense() {
   if (!order.value?.order_no) return
 
   try {
-    const res = await fetch(
-      `${API}/api/orders/${order.value.order_no}/license`
+    const data = await apiRequest(
+      `/api/orders/${encodeURIComponent(order.value.order_no)}/license`
     )
 
-    const data = await res.json()
-
-    if (!res.ok) {
-      throw new Error(data.detail || '授权码获取失败')
-    }
-
     license.value = data.license || data
+
+    if (!license.value?.license_key) {
+      license.value = null
+      throw new Error('服务器暂未返回有效授权码，请稍后重试')
+    }
   } catch (e) {
+    license.value = null
     error.value = e.message || '授权码获取失败，请稍后重试'
   }
 }
 
 function resetOrder() {
-  clearInterval(timer)
-  timer = null
-
+  stopCountdown()
   stopPolling()
 
   order.value = null
@@ -532,7 +569,7 @@ async function copyLicense() {
 }
 
 onBeforeUnmount(() => {
-  clearInterval(timer)
+  stopCountdown()
   stopPolling()
 })
 </script>
