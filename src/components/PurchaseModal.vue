@@ -1,6 +1,6 @@
 
 <template>
-<div class="modal-mask" @click.self="$emit('close')">
+<div class="modal-mask">
 <section class="purchase-modal">
 <button class="close-btn" @click="$emit('close')">×</button>
 
