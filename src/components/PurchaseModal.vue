@@ -175,9 +175,6 @@
         <button
           v-if="order.status === 'pending'"
           class="check-btn"
-          :disabled="checking || pollingActive"
-          @click="checkPayment"
-        >
           {{ checking ? '正在查询...' : '我已完成支付' }}
         </button>
 
@@ -416,11 +413,11 @@ async function createOrder() {
     emit('created', order.value)
 
     if (order.value.status === 'paid') {
-      stopCountdown()
-      await getLicense()
-    } else if (order.value.status === 'pending') {
-      startPolling()
-    }
+  stopCountdown()
+  await getLicense()
+} else {
+  stopPolling()
+}
   } catch (e) {
     error.value = e.message || '订单创建失败，请稍后重试'
   } finally {
@@ -506,12 +503,7 @@ async function checkPayment() {
   }
 
   await fetchOrderStatus(true)
-
-  if (order.value?.status === 'pending') {
-    startPolling()
-  }
 }
-
 async function getLicense() {
   if (!order.value?.order_no) return
 
