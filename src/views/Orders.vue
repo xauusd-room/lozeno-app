@@ -7,7 +7,6 @@
         <h1>我的订单</h1>
         <p class="subtitle">查看购买记录、订单状态和支付信息。</p>
       </div>
-      <router-link class="back-link" to="/">返回首页</router-link>
     </div>
 
     <div class="summary-grid">
