@@ -25,7 +25,14 @@
     <template v-else>
       <section class="profile-card">
         <div class="profile-top">
-          <div class="avatar">{{ avatarText }}</div>
+          <div class="avatar-wrap">
+            <img v-if="avatarPreview" class="avatar avatar-image" :src="avatarPreview" alt="个人头像" />
+            <div v-else class="avatar">{{ avatarText }}</div>
+            <label class="avatar-upload-btn">
+              更换头像
+              <input type="file" accept="image/png,image/jpeg,image/webp" @change="handleAvatarSelect" />
+            </label>
+          </div>
           <div class="profile-identity">
             <h2>{{ profile.display_name || 'LOZENO 用户' }}</h2>
             <p>{{ profile.email }}</p>
@@ -160,6 +167,7 @@ import {
   updateProfile,
   changePassword
 } from '../services/account'
+import { setCurrentUser } from '../services/userStore'
 
 const router = useRouter()
 
@@ -173,14 +181,18 @@ const profile = ref({
   email: '',
   display_name: '',
   phone: '',
+  avatar_data_url: '',
   email_verified: false,
   created_at: null
 })
 
 const form = reactive({
   display_name: '',
-  phone: ''
+  phone: '',
+  avatar_data_url: ''
 })
+
+const avatarPreview = computed(() => form.avatar_data_url || profile.value.avatar_data_url || '')
 
 const passwordForm = reactive({
   current_password: '',
@@ -224,10 +236,54 @@ async function loadProfile() {
     profile.value = { ...profile.value, ...user }
     form.display_name = user.display_name || ''
     form.phone = user.phone || ''
+    form.avatar_data_url = user.avatar_data_url || ''
+    setCurrentUser(user)
   } catch (error) {
     loadError.value = error.message || '个人资料加载失败'
   } finally {
     loading.value = false
+  }
+}
+
+async function handleAvatarSelect(event) {
+  const file = event.target.files?.[0]
+  event.target.value = ''
+  if (!file) return
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+    showNotice('请选择 JPG、PNG 或 WEBP 图片', 'error')
+    return
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    showNotice('原始图片不能超过 10 MB', 'error')
+    return
+  }
+  try {
+    const source = await new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result)
+      reader.onerror = () => reject(new Error('图片读取失败'))
+      reader.readAsDataURL(file)
+    })
+    const image = await new Promise((resolve, reject) => {
+      const img = new Image()
+      img.onload = () => resolve(img)
+      img.onerror = () => reject(new Error('无法读取这张图片'))
+      img.src = source
+    })
+    const maxSide = 256
+    const scale = Math.min(1, maxSide / Math.max(image.width, image.height))
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.round(image.width * scale))
+    canvas.height = Math.max(1, Math.round(image.height * scale))
+    const context = canvas.getContext('2d')
+    if (!context) throw new Error('图片处理失败')
+    context.drawImage(image, 0, 0, canvas.width, canvas.height)
+    const compressed = canvas.toDataURL('image/jpeg', 0.82)
+    if (compressed.length > 450000) throw new Error('图片压缩后仍然过大，请换一张图片')
+    form.avatar_data_url = compressed
+    showNotice('头像已选择，请点击“保存修改”完成上传')
+  } catch (error) {
+    showNotice(error.message || '头像处理失败', 'error')
   }
 }
 
@@ -240,12 +296,15 @@ async function saveProfile() {
   try {
     const user = await updateProfile({
       display_name: form.display_name.trim(),
-      phone: form.phone.trim()
+      phone: form.phone.trim(),
+      avatar_data_url: form.avatar_data_url || profile.value.avatar_data_url || ''
     })
 
     profile.value = { ...profile.value, ...user }
     form.display_name = user.display_name || ''
     form.phone = user.phone || ''
+    form.avatar_data_url = user.avatar_data_url || ''
+    setCurrentUser(user)
     showNotice('个人资料已保存')
   } catch (error) {
     showNotice(error.message || '保存失败', 'error')
@@ -375,6 +434,14 @@ h1 {
   border-bottom: 1px solid #252936;
 }
 
+.avatar-wrap {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
 .avatar {
   display: grid;
   width: 58px;
@@ -387,6 +454,28 @@ h1 {
   font-size: 23px;
   font-weight: 700;
 }
+
+.avatar-image {
+  object-fit: cover;
+}
+
+.avatar-upload-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 27px;
+  padding: 0 9px;
+  color: #9bb0ff;
+  background: #1b2340;
+  border: 1px solid #303f78;
+  border-radius: 6px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.avatar-upload-btn:hover { color: #fff; border-color: #6484ff; }
+.avatar-upload-btn input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 
 .profile-identity {
   min-width: 0;
