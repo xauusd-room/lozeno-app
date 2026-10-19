@@ -1,4 +1,3 @@
-
 <template>
   <main class="account-page">
     <div class="page-heading">
