@@ -36,6 +36,7 @@
           {{ item.label }}
         </button>
       </div>
+
       <button class="refresh-btn" :disabled="loading" @click="loadLicenses">
         {{ loading ? '加载中…' : '刷新授权' }}
       </button>
@@ -63,19 +64,29 @@
             ? '请尝试切换授权状态筛选。'
             : '订单确认付款后，系统会为该订单生成授权。' }}
         </p>
-        <router-link v-if="!licenses.length" class="primary-btn link-btn" to="/orders">
+        <router-link
+          v-if="!licenses.length"
+          class="primary-btn link-btn"
+          to="/orders"
+        >
           查看我的订单
         </router-link>
       </div>
 
       <div v-else class="license-list">
-        <article v-for="item in filteredLicenses" :key="item.license_key" class="license-card">
+        <article
+          v-for="item in filteredLicenses"
+          :key="item.license_key"
+          class="license-card"
+        >
           <div class="license-head">
             <div class="product-mark">EA</div>
+
             <div class="license-product">
               <h2>{{ item.product_name || `EA 产品 #${item.product_id}` }}</h2>
               <p>授权类型：{{ licenseTypeLabel(item.license_type) }}</p>
             </div>
+
             <span class="status" :class="`status-${item.status}`">
               {{ statusLabel(item.status) }}
             </span>
@@ -86,7 +97,9 @@
               <span>授权码</span>
               <strong>{{ item.license_key }}</strong>
             </div>
-            <button class="copy-btn" @click="copyKey(item.license_key)">复制授权码</button>
+            <button class="copy-btn" @click="copyKey(item.license_key)">
+              复制授权码
+            </button>
           </div>
 
           <div class="license-info">
@@ -94,14 +107,17 @@
               <span>MT5 账户</span>
               <strong>{{ item.account || '尚未绑定' }}</strong>
             </div>
+
             <div>
               <span>授权创建时间</span>
               <strong>{{ formatDate(item.created_at) }}</strong>
             </div>
+
             <div>
               <span>有效期</span>
               <strong>{{ item.expires_at ? formatDate(item.expires_at) : '长期有效' }}</strong>
             </div>
+
             <div>
               <span>关联订单</span>
               <strong>{{ item.order_no || '—' }}</strong>
@@ -109,7 +125,19 @@
           </div>
 
           <div class="license-actions">
-            <button class="text-btn" @click="openDetails(item)">查看详情</button>
+            <button class="text-btn" @click="openDetails(item)">
+              查看详情
+            </button>
+
+            <button
+              v-if="item.status === 'active' && item.order_no"
+              class="primary-btn"
+              :disabled="!!downloadingOrder"
+              @click="handleDownload(item)"
+            >
+              {{ downloadingOrder === item.order_no ? '下载中…' : '下载 EA' }}
+            </button>
+
             <button
               v-if="item.status === 'active' && !item.account"
               class="primary-btn"
@@ -117,6 +145,7 @@
             >
               绑定 MT5 账户
             </button>
+
             <span v-else-if="item.account" class="bound-label">
               <span class="bound-dot"></span>
               已绑定账户
@@ -130,28 +159,87 @@
       {{ notice.text }}
     </p>
 
-    <div v-if="selectedLicense" class="modal-mask" @click.self="closeDetails">
+    <div
+      v-if="selectedLicense"
+      class="modal-mask"
+      @click.self="closeDetails"
+    >
       <section class="detail-modal">
-        <button class="close-btn" aria-label="关闭" @click="closeDetails">×</button>
+        <button class="close-btn" aria-label="关闭" @click="closeDetails">
+          ×
+        </button>
+
         <p class="eyebrow">LICENSE DETAILS</p>
         <h2>授权详情</h2>
 
-        <div v-if="detailLoading" class="modal-state">正在加载授权详情…</div>
-        <div v-else-if="detailError" class="modal-error">{{ detailError }}</div>
+        <div v-if="detailLoading" class="modal-state">
+          正在加载授权详情…
+        </div>
+
+        <div v-else-if="detailError" class="modal-error">
+          {{ detailError }}
+        </div>
+
         <template v-else-if="detail">
           <div class="detail-rows">
-            <div><span>产品名称</span><strong>{{ detail.product_name || `EA 产品 #${detail.product_id}` }}</strong></div>
-            <div><span>授权状态</span><strong>{{ statusLabel(detail.status) }}</strong></div>
-            <div class="key-row"><span>授权码</span><strong>{{ detail.license_key }}</strong></div>
-            <div><span>授权类型</span><strong>{{ licenseTypeLabel(detail.license_type) }}</strong></div>
-            <div><span>MT5 账户</span><strong>{{ detail.account || '尚未绑定' }}</strong></div>
-            <div><span>创建时间</span><strong>{{ formatDate(detail.created_at) }}</strong></div>
-            <div><span>有效期</span><strong>{{ detail.expires_at ? formatDate(detail.expires_at) : '长期有效' }}</strong></div>
-            <div><span>关联订单</span><strong>{{ detail.order_no || '—' }}</strong></div>
+            <div>
+              <span>产品名称</span>
+              <strong>{{ detail.product_name || `EA 产品 #${detail.product_id}` }}</strong>
+            </div>
+
+            <div>
+              <span>授权状态</span>
+              <strong>{{ statusLabel(detail.status) }}</strong>
+            </div>
+
+            <div class="key-row">
+              <span>授权码</span>
+              <strong>{{ detail.license_key }}</strong>
+            </div>
+
+            <div>
+              <span>授权类型</span>
+              <strong>{{ licenseTypeLabel(detail.license_type) }}</strong>
+            </div>
+
+            <div>
+              <span>MT5 账户</span>
+              <strong>{{ detail.account || '尚未绑定' }}</strong>
+            </div>
+
+            <div>
+              <span>创建时间</span>
+              <strong>{{ formatDate(detail.created_at) }}</strong>
+            </div>
+
+            <div>
+              <span>有效期</span>
+              <strong>{{ detail.expires_at ? formatDate(detail.expires_at) : '长期有效' }}</strong>
+            </div>
+
+            <div>
+              <span>关联订单</span>
+              <strong>{{ detail.order_no || '—' }}</strong>
+            </div>
           </div>
 
           <div class="modal-actions">
-            <button class="secondary-btn" @click="copyKey(detail.license_key)">复制授权码</button>
+            <button
+              class="secondary-btn"
+              @click="copyKey(detail.license_key)"
+            >
+              复制授权码
+            </button>
+
+            <button
+              v-if="detail.status === 'active' && detail.order_no"
+              class="primary-btn"
+              :disabled="!!downloadingOrder"
+              @click="handleDownload(detail)"
+            >
+              {{ downloadingOrder === detail.order_no ? '下载中…' : '下载 EA' }}
+            </button>
+
             <button
               v-if="detail.status === 'active' && !detail.account"
               class="primary-btn"
@@ -159,17 +247,28 @@
             >
               绑定 MT5 账户
             </button>
-            <button class="secondary-btn" @click="closeDetails">关闭</button>
+
+            <button class="secondary-btn" @click="closeDetails">
+              关闭
+            </button>
           </div>
         </template>
       </section>
     </div>
 
-    <div v-if="bindTarget" class="modal-mask" @click.self="closeBind">
+    <div
+      v-if="bindTarget"
+      class="modal-mask"
+      @click.self="closeBind"
+    >
       <section class="detail-modal bind-modal">
-        <button class="close-btn" aria-label="关闭" @click="closeBind">×</button>
+        <button class="close-btn" aria-label="关闭" @click="closeBind">
+          ×
+        </button>
+
         <p class="eyebrow">MT5 ACCOUNT BINDING</p>
         <h2>绑定 MT5 账户</h2>
+
         <p class="bind-description">
           绑定后，此授权码只能用于绑定的 MT5 账户。请确认账户号码准确无误。
         </p>
@@ -192,11 +291,24 @@
             />
           </label>
 
-          <p v-if="bindError" class="inline-error">{{ bindError }}</p>
+          <p v-if="bindError" class="inline-error">
+            {{ bindError }}
+          </p>
 
           <div class="modal-actions">
-            <button class="secondary-btn" type="button" @click="closeBind">取消</button>
-            <button class="primary-btn" type="submit" :disabled="binding">
+            <button
+              class="secondary-btn"
+              type="button"
+              @click="closeBind"
+            >
+              取消
+            </button>
+
+            <button
+              class="primary-btn"
+              type="submit"
+              :disabled="binding"
+            >
               {{ binding ? '绑定中…' : '确认绑定' }}
             </button>
           </div>
@@ -211,7 +323,8 @@ import { computed, onMounted, ref } from 'vue'
 import {
   fetchLicenses,
   fetchLicense,
-  bindLicense
+  bindLicense,
+  downloadOrderEA
 } from '../services/account'
 
 const licenses = ref([])
@@ -229,6 +342,7 @@ const bindAccount = ref('')
 const bindError = ref('')
 const binding = ref(false)
 
+const downloadingOrder = ref('')
 const notice = ref({ text: '', type: 'success' })
 
 const filters = [
@@ -354,6 +468,21 @@ async function submitBinding() {
     bindError.value = error.message || '绑定失败'
   } finally {
     binding.value = false
+  }
+}
+
+async function handleDownload(item) {
+  if (!item?.order_no || downloadingOrder.value) return
+
+  downloadingOrder.value = item.order_no
+
+  try {
+    await downloadOrderEA(item.order_no)
+    showNotice('下载请求已提交')
+  } catch (error) {
+    showNotice(error.message || 'EA 下载失败，请稍后重试', 'error')
+  } finally {
+    downloadingOrder.value = ''
   }
 }
 
@@ -638,7 +767,8 @@ h1 {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 20px;
+  flex-wrap: wrap;
+  gap: 12px;
   padding-top: 15px;
   border-top: 1px solid #252936;
 }
@@ -910,7 +1040,9 @@ h1 {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @media (max-width: 760px) {
@@ -976,4 +1108,3 @@ h1 {
   }
 }
 </style>
-
