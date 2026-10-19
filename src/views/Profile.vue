@@ -33,14 +33,13 @@
               <input type="file" accept="image/png,image/jpeg,image/webp" @change="handleAvatarSelect" />
             </label>
             <button
-              v-if="avatarPending"
-              class="avatar-save-btn"
-              type="button"
-              :disabled="savingAvatar"
-              @click="saveAvatar"
-            >
-              {{ savingAvatar ? '保存中…' : '保存头像' }}
-            </button>
+  class="avatar-save-btn"
+  type="button"
+  :disabled="savingAvatar || !form.avatar_data_url"
+  @click="saveAvatar"
+>
+  {{ savingAvatar ? '保存中…' : '保存头像' }}
+</button>
           </div>
           <div class="profile-identity">
             <h2>{{ profile.display_name || 'LOZENO 用户' }}</h2>
