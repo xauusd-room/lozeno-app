@@ -122,6 +122,44 @@ export async function bindLicense(licenseKey, account) {
   if (data.success === false) {
     throw new Error(data.message || '授权绑定失败')
   }
+  
+export async function downloadOrderEA(orderNo) {
+  const token = localStorage.getItem('lozeno_access_token')
+
+  if (!token) {
+    throw new Error('请先登录')
+  }
+
+  const response = await fetch(
+    `${API_BASE}/api/orders/${encodeURIComponent(orderNo)}/download`,
+    {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/octet-stream'
+      }
+    }
+  )
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}))
+    throw new Error(
+      data.detail || data.message || `下载失败（HTTP ${response.status}）`
+    )
+  }
+
+  const blob = await response.blob()
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+
+  link.href = url
+  link.download = `LOZENO-EA-${orderNo}.ex5`
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
 
   return data.license || data
 }
