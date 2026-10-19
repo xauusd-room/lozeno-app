@@ -7,7 +7,6 @@
         <h1>个人资料</h1>
         <p class="subtitle">管理你的 LOZENO 账户信息和登录安全。</p>
       </div>
-      <router-link class="back-link" to="/">返回首页</router-link>
     </div>
 
     <div v-if="loading" class="state-panel">
