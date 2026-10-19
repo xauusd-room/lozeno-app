@@ -5,20 +5,36 @@
     <p class="page-subtitle">浏览 EA 排名、探索实用插件，寻找适合自己的自动交易工具。</p>
 
     <div class="ea-card-grid">
-      <EaCard v-for="item in eaList" :key="item.id" v-bind="item" />
+      <EaCard
+        v-for="item in eaList"
+        :key="item.id"
+        v-bind="item"
+      />
     </div>
   </main>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { computed } from 'vue'
 import EaCard from '../components/EaCard.vue'
+import { eaProducts } from '../data/eaProducts.js'
 
-const eaList = ref([
-  { id: 1, title: 'TrendMaster Pro', tag: '趋势追踪', platform: 'MT5', platformClass: 'text-mt5', rate: 24.5, installs: 23, winRate: 48.2 },
-  { id: 2, title: 'GridScalper X', tag: '网格震荡', platform: 'MT4', platformClass: 'text-mt4', rate: 112.8, installs: 332, winRate: 91.45 },
-  { id: 3, title: 'NeuralArbitrage', tag: '高频套利', platform: 'AI', platformClass: 'text-ai', rate: -1.2, installs: 169, winRate: 54.1 }
-])
+const eaList = computed(() =>
+  Object.values(eaProducts).map(product => ({
+    id: product.id,
+    title: product.name,
+    tag: product.type,
+    platform: product.platformTag,
+    platformClass: {
+      MT4: 'text-mt4',
+      MT5: 'text-mt5',
+      AI: 'text-ai'
+    }[product.platformTag] || '',
+    rate: Number(String(product.ret).replace('%', '').replace('+', '')),
+    installs: product.installs ?? 0,
+    winRate: Number(String(product.win).replace('%', '').replace('+', ''))
+  }))
+)
 </script>
 
 <style scoped>
