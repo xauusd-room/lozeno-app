@@ -122,7 +122,12 @@ export async function bindLicense(licenseKey, account) {
   if (data.success === false) {
     throw new Error(data.message || '授权绑定失败')
   }
-  
+
+  return data.license || data
+}
+
+// ==================== EA 文件下载 ====================
+
 export async function downloadOrderEA(orderNo) {
   const token = localStorage.getItem('lozeno_access_token')
 
@@ -143,8 +148,11 @@ export async function downloadOrderEA(orderNo) {
 
   if (!response.ok) {
     const data = await response.json().catch(() => ({}))
+
     throw new Error(
-      data.detail || data.message || `下载失败（HTTP ${response.status}）`
+      data.detail ||
+      data.message ||
+      `下载失败（HTTP ${response.status}）`
     )
   }
 
@@ -154,12 +162,12 @@ export async function downloadOrderEA(orderNo) {
 
   link.href = url
   link.download = `LOZENO-EA-${orderNo}.ex5`
+
   document.body.appendChild(link)
   link.click()
   link.remove()
-  URL.revokeObjectURL(url)
-}
 
-
-  return data.license || data
+  window.setTimeout(() => {
+    URL.revokeObjectURL(url)
+  }, 1000)
 }
