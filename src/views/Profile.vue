@@ -26,25 +26,38 @@
       <section class="profile-card">
         <div class="profile-top">
           <div class="avatar-wrap">
-            <img v-if="avatarPreview" class="avatar avatar-image" :src="avatarPreview" alt="个人头像" />
+            <img
+              v-if="avatarPreview"
+              class="avatar avatar-image"
+              :src="avatarPreview"
+              alt="个人头像"
+            />
             <div v-else class="avatar">{{ avatarText }}</div>
+
             <label class="avatar-upload-btn">
               更换头像
-              <input type="file" accept="image/png,image/jpeg,image/webp" @change="handleAvatarSelect" />
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                @change="handleAvatarSelect"
+              />
             </label>
+
             <button
               class="avatar-save-btn"
               type="button"
-              :disabled="savingAvatar || !form.avatar_data_url"
+              :disabled="savingAvatar || !avatarPending"
               @click="saveAvatar"
             >
               {{ savingAvatar ? '保存中…' : '保存头像' }}
             </button>
           </div>
+
           <div class="profile-identity">
             <h2>{{ profile.display_name || 'LOZENO 用户' }}</h2>
             <p>{{ profile.email }}</p>
           </div>
+
           <span class="account-badge">账户已登录</span>
         </div>
 
@@ -54,10 +67,12 @@
             <strong>{{ profile.email || '—' }}</strong>
             <small>邮箱暂不支持修改</small>
           </div>
+
           <div class="info-item">
             <span>注册时间</span>
             <strong>{{ formatDate(profile.created_at) }}</strong>
           </div>
+
           <div class="info-item">
             <span>邮箱验证状态</span>
             <strong :class="profile.email_verified ? 'verified' : 'unverified'">
@@ -159,16 +174,27 @@
           </div>
         </form>
       </section>
-
-      <p v-if="notice.text" class="notice" :class="notice.type">
-        {{ notice.text }}
-      </p>
     </template>
+
+    <Transition name="toast">
+      <div
+        v-if="notice.text"
+        class="save-toast"
+        :class="`toast-${notice.type}`"
+        role="status"
+        aria-live="polite"
+      >
+        <span class="toast-icon">
+          {{ notice.type === 'error' ? '!' : '✓' }}
+        </span>
+        <span>{{ notice.text }}</span>
+      </div>
+    </Transition>
   </main>
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, onBeforeUnmount, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   fetchProfile,
@@ -202,7 +228,9 @@ const form = reactive({
   avatar_data_url: ''
 })
 
-const avatarPreview = computed(() => form.avatar_data_url || profile.value.avatar_data_url || '')
+const avatarPreview = computed(
+  () => form.avatar_data_url || profile.value.avatar_data_url || ''
+)
 
 const passwordForm = reactive({
   current_password: '',
@@ -215,6 +243,8 @@ const notice = reactive({
   type: 'success'
 })
 
+let noticeTimer = null
+
 const isAuthError = computed(() =>
   /登录已失效|请先登录|重新登录/.test(loadError.value)
 )
@@ -225,14 +255,27 @@ const avatarText = computed(() => {
 })
 
 function showNotice(text, type = 'success') {
+  if (noticeTimer !== null) {
+    window.clearTimeout(noticeTimer)
+    noticeTimer = null
+  }
+
   notice.text = text
   notice.type = type
+
+  noticeTimer = window.setTimeout(() => {
+    notice.text = ''
+    noticeTimer = null
+  }, 5800)
 }
 
 function formatDate(value) {
   if (!value) return '—'
+
   const date = new Date(value)
+
   if (Number.isNaN(date.getTime())) return '—'
+
   return date.toLocaleString('zh-CN', { hour12: false })
 }
 
@@ -243,10 +286,13 @@ async function loadProfile() {
 
   try {
     const user = await fetchProfile()
+
     profile.value = { ...profile.value, ...user }
     form.display_name = user.display_name || ''
     form.phone = user.phone || ''
     form.avatar_data_url = user.avatar_data_url || ''
+    avatarPending.value = false
+
     setCurrentUser(user)
   } catch (error) {
     loadError.value = error.message || '个人资料加载失败'
@@ -258,40 +304,64 @@ async function loadProfile() {
 async function handleAvatarSelect(event) {
   const file = event.target.files?.[0]
   event.target.value = ''
+
   if (!file) return
+
   if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
     showNotice('请选择 JPG、PNG 或 WEBP 图片', 'error')
     return
   }
+
   if (file.size > 10 * 1024 * 1024) {
     showNotice('原始图片不能超过 10 MB', 'error')
     return
   }
+
   try {
     const source = await new Promise((resolve, reject) => {
       const reader = new FileReader()
+
       reader.onload = () => resolve(reader.result)
       reader.onerror = () => reject(new Error('图片读取失败'))
+
       reader.readAsDataURL(file)
     })
+
     const image = await new Promise((resolve, reject) => {
       const img = new Image()
+
       img.onload = () => resolve(img)
       img.onerror = () => reject(new Error('无法读取这张图片'))
       img.src = source
     })
+
     const maxSide = 256
-    const scale = Math.min(1, maxSide / Math.max(image.width, image.height))
+    const scale = Math.min(
+      1,
+      maxSide / Math.max(image.width, image.height)
+    )
+
     const canvas = document.createElement('canvas')
     canvas.width = Math.max(1, Math.round(image.width * scale))
     canvas.height = Math.max(1, Math.round(image.height * scale))
+
     const context = canvas.getContext('2d')
-    if (!context) throw new Error('图片处理失败')
+
+    if (!context) {
+      throw new Error('图片处理失败')
+    }
+
     context.drawImage(image, 0, 0, canvas.width, canvas.height)
+
     const compressed = canvas.toDataURL('image/jpeg', 0.82)
-    if (compressed.length > 450000) throw new Error('图片压缩后仍然过大，请换一张图片')
+
+    if (compressed.length > 450000) {
+      throw new Error('图片压缩后仍然过大，请换一张图片')
+    }
+
     form.avatar_data_url = compressed
     avatarPending.value = true
+
     showNotice('头像已选择，请点击“保存头像”完成上传')
   } catch (error) {
     showNotice(error.message || '头像处理失败', 'error')
@@ -301,7 +371,7 @@ async function handleAvatarSelect(event) {
 async function saveAvatar() {
   if (savingAvatar.value) return
 
-  if (!form.avatar_data_url) {
+  if (!avatarPending.value || !form.avatar_data_url) {
     showNotice('请先选择头像图片', 'error')
     return
   }
@@ -315,9 +385,13 @@ async function saveAvatar() {
     })
 
     profile.value = { ...profile.value, ...user }
-    form.avatar_data_url = user.avatar_data_url || form.avatar_data_url
+
+    form.avatar_data_url =
+      user.avatar_data_url || form.avatar_data_url
+
     setCurrentUser(profile.value)
     avatarPending.value = false
+
     showNotice('头像已保存')
   } catch (error) {
     showNotice(error.message || '头像保存失败', 'error')
@@ -339,10 +413,16 @@ async function saveProfile() {
     })
 
     profile.value = { ...profile.value, ...user }
+
     form.display_name = user.display_name || ''
     form.phone = user.phone || ''
-    form.avatar_data_url = user.avatar_data_url || ''
-    setCurrentUser(user)
+
+    if (user.avatar_data_url) {
+      form.avatar_data_url = user.avatar_data_url
+    }
+
+    setCurrentUser(profile.value)
+
     showNotice('个人资料已保存')
   } catch (error) {
     showNotice(error.message || '保存失败', 'error')
@@ -385,7 +465,10 @@ async function savePassword() {
     })
 
     showNotice(result.message || '密码已修改，请重新登录')
-    window.setTimeout(() => router.push('/'), 1200)
+
+    window.setTimeout(() => {
+      router.push('/')
+    }, 1200)
   } catch (error) {
     showNotice(error.message || '密码修改失败', 'error')
   } finally {
@@ -394,6 +477,12 @@ async function savePassword() {
 }
 
 onMounted(loadProfile)
+
+onBeforeUnmount(() => {
+  if (noticeTimer !== null) {
+    window.clearTimeout(noticeTimer)
+  }
+})
 </script>
 
 <style scoped>
@@ -512,8 +601,18 @@ h1 {
   cursor: pointer;
 }
 
-.avatar-upload-btn:hover { color: #fff; border-color: #6484ff; }
-.avatar-upload-btn input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.avatar-upload-btn:hover {
+  color: #fff;
+  border-color: #6484ff;
+}
+
+.avatar-upload-btn input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
 
 .avatar-save-btn {
   min-height: 27px;
@@ -526,8 +625,15 @@ h1 {
   font: inherit;
   font-size: 11px;
 }
-.avatar-save-btn:hover:not(:disabled) { background: #4169ff; }
-.avatar-save-btn:disabled { cursor: not-allowed; opacity: 0.6; }
+
+.avatar-save-btn:hover:not(:disabled) {
+  background: #4169ff;
+}
+
+.avatar-save-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
 
 .profile-identity {
   min-width: 0;
@@ -705,28 +811,94 @@ h1 {
   animation: spin 0.8s linear infinite;
 }
 
-.notice {
-  margin: 0;
-  padding: 13px 16px;
-  border: 1px solid;
-  border-radius: 8px;
-  font-size: 13px;
+/* 屏幕中央提示框 */
+.save-toast {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 99999;
+  display: flex;
+  max-width: min(420px, calc(100vw - 32px));
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 18px 28px;
+  color: #e7eaf0;
+  background: #141722;
+  border: 1px solid #303747;
+  border-radius: 12px;
+  box-shadow: 0 18px 60px #0008;
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
 }
 
-.notice.success {
-  color: #83d8ae;
-  background: #18352b;
+.toast-icon {
+  display: grid;
+  width: 27px;
+  height: 27px;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.toast-success {
   border-color: #285541;
 }
 
-.notice.error {
-  color: #f08f8f;
-  background: #351e24;
+.toast-success .toast-icon {
+  color: #83d8ae;
+  background: #18352b;
+}
+
+.toast-error {
   border-color: #5a2b36;
 }
 
+.toast-error .toast-icon {
+  color: #f08f8f;
+  background: #351e24;
+}
+
+/* 显示后保持约 5 秒，再渐渐淡出 */
+.toast-enter-active {
+  animation: toast-show 0.25s ease-out both;
+}
+
+.toast-leave-active {
+  animation: toast-hide 0.8s ease-in both;
+}
+
+@keyframes toast-show {
+  from {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% + 10px));
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%);
+  }
+}
+
+@keyframes toast-hide {
+  from {
+    opacity: 1;
+    transform: translate(-50%, -50%);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% - 8px));
+  }
+}
+
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @media (max-width: 680px) {
@@ -769,6 +941,18 @@ h1 {
 
   .form-actions .primary-btn {
     width: 100%;
+  }
+
+  .save-toast {
+    padding: 16px 22px;
+    font-size: 13px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast-enter-active,
+  .toast-leave-active {
+    animation-duration: 0.01ms;
   }
 }
 </style>
