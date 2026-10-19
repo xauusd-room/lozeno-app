@@ -32,6 +32,15 @@
               更换头像
               <input type="file" accept="image/png,image/jpeg,image/webp" @change="handleAvatarSelect" />
             </label>
+            <button
+              v-if="avatarPending"
+              class="avatar-save-btn"
+              type="button"
+              :disabled="savingAvatar"
+              @click="saveAvatar"
+            >
+              {{ savingAvatar ? '保存中…' : '保存头像' }}
+            </button>
           </div>
           <div class="profile-identity">
             <h2>{{ profile.display_name || 'LOZENO 用户' }}</h2>
@@ -174,6 +183,8 @@ const router = useRouter()
 const loading = ref(true)
 const loadError = ref('')
 const savingProfile = ref(false)
+const savingAvatar = ref(false)
+const avatarPending = ref(false)
 const savingPassword = ref(false)
 
 const profile = ref({
@@ -281,9 +292,33 @@ async function handleAvatarSelect(event) {
     const compressed = canvas.toDataURL('image/jpeg', 0.82)
     if (compressed.length > 450000) throw new Error('图片压缩后仍然过大，请换一张图片')
     form.avatar_data_url = compressed
-    showNotice('头像已选择，请点击“保存修改”完成上传')
+    avatarPending.value = true
+    showNotice('头像已选择，请点击“保存头像”完成上传')
   } catch (error) {
     showNotice(error.message || '头像处理失败', 'error')
+  }
+}
+
+async function saveAvatar() {
+  if (savingAvatar.value || !avatarPending.value || !form.avatar_data_url) return
+
+  savingAvatar.value = true
+  notice.text = ''
+
+  try {
+    const user = await updateProfile({
+      avatar_data_url: form.avatar_data_url
+    })
+
+    profile.value = { ...profile.value, ...user }
+    form.avatar_data_url = user.avatar_data_url || form.avatar_data_url
+    setCurrentUser({ ...profile.value, ...user })
+    avatarPending.value = false
+    showNotice('头像已保存')
+  } catch (error) {
+    showNotice(error.message || '头像保存失败，请检查后端是否支持头像保存', 'error')
+  } finally {
+    savingAvatar.value = false
   }
 }
 
@@ -296,8 +331,7 @@ async function saveProfile() {
   try {
     const user = await updateProfile({
       display_name: form.display_name.trim(),
-      phone: form.phone.trim(),
-      avatar_data_url: form.avatar_data_url || profile.value.avatar_data_url || ''
+      phone: form.phone.trim()
     })
 
     profile.value = { ...profile.value, ...user }
@@ -476,6 +510,20 @@ h1 {
 
 .avatar-upload-btn:hover { color: #fff; border-color: #6484ff; }
 .avatar-upload-btn input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+
+.avatar-save-btn {
+  min-height: 27px;
+  padding: 0 10px;
+  color: #fff;
+  background: #315bff;
+  border: 1px solid #315bff;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+}
+.avatar-save-btn:hover:not(:disabled) { background: #4169ff; }
+.avatar-save-btn:disabled { cursor: not-allowed; opacity: 0.6; }
 
 .profile-identity {
   min-width: 0;
