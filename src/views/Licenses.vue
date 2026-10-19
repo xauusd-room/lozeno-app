@@ -7,7 +7,6 @@
         <h1>我的授权</h1>
         <p class="subtitle">管理 EA 授权码，查看授权状态并绑定 MT5 账户。</p>
       </div>
-      <router-link class="back-link" to="/">返回首页</router-link>
     </div>
 
     <div class="summary-grid">
