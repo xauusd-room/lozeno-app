@@ -36,6 +36,7 @@
           {{ item.label }}
         </button>
       </div>
+
       <button class="refresh-btn" :disabled="loading" @click="loadOrders">
         {{ loading ? '加载中…' : '刷新订单' }}
       </button>
@@ -58,19 +59,30 @@
       <div v-if="!filteredOrders.length" class="state-panel">
         <div class="empty-icon">▤</div>
         <h3>{{ orders.length ? '没有符合条件的订单' : '还没有订单' }}</h3>
-        <p>{{ orders.length ? '请尝试切换状态筛选。' : '购买 EA 后，订单会显示在这里。' }}</p>
-        <router-link v-if="!orders.length" class="primary-btn link-btn" to="/market">
+        <p>
+          {{ orders.length ? '请尝试切换状态筛选。' : '购买 EA 后，订单会显示在这里。' }}
+        </p>
+        <router-link
+          v-if="!orders.length"
+          class="primary-btn link-btn"
+          to="/market"
+        >
           浏览 EA 产品
         </router-link>
       </div>
 
       <div v-else class="order-list">
-        <article v-for="order in filteredOrders" :key="order.order_no" class="order-card">
+        <article
+          v-for="order in filteredOrders"
+          :key="order.order_no"
+          class="order-card"
+        >
           <div class="order-head">
             <div class="order-number">
               <span>订单编号</span>
               <strong>{{ order.order_no }}</strong>
             </div>
+
             <span class="status" :class="`status-${order.status}`">
               {{ statusLabel(order.status) }}
             </span>
@@ -78,11 +90,13 @@
 
           <div class="order-main">
             <div class="product-mark">EA</div>
+
             <div class="product-info">
               <h2>{{ order.product_name || `EA 产品 #${order.product_id}` }}</h2>
               <p>订单创建时间：{{ formatDate(order.created_at) }}</p>
               <p>支付方式：{{ paymentLabel(order.payment_method) }}</p>
             </div>
+
             <div class="order-amount">
               <span>订单金额</span>
               <strong>{{ formatAmount(order.amount, order.currency) }}</strong>
@@ -93,6 +107,7 @@
             <button class="text-btn" @click="openDetails(order)">
               查看详情
             </button>
+
             <button
               v-if="order.status === 'pending'"
               class="text-btn danger-btn"
@@ -101,6 +116,7 @@
             >
               {{ busyOrder === order.order_no ? '处理中…' : '取消订单' }}
             </button>
+
             <button
               v-if="order.status === 'paid'"
               class="text-btn"
@@ -118,38 +134,74 @@
       {{ notice.text }}
     </p>
 
-    <div v-if="selectedOrder" class="modal-mask" @click.self="closeDetails">
+    <div
+      v-if="selectedOrder"
+      class="modal-mask"
+      @click.self="closeDetails"
+    >
       <section class="detail-modal">
-        <button class="close-btn" aria-label="关闭" @click="closeDetails">×</button>
+        <button class="close-btn" aria-label="关闭" @click="closeDetails">
+          ×
+        </button>
+
         <p class="eyebrow">ORDER DETAILS</p>
         <h2>订单详情</h2>
 
-        <div v-if="detailLoading" class="modal-state">正在加载订单详情…</div>
-        <div v-else-if="detailError" class="modal-error">{{ detailError }}</div>
+        <div v-if="detailLoading" class="modal-state">
+          正在加载订单详情…
+        </div>
+
+        <div v-else-if="detailError" class="modal-error">
+          {{ detailError }}
+        </div>
+
         <template v-else-if="detail">
           <div class="detail-product">
             <div>
               <span>商品名称</span>
-              <strong>{{ detail.product_name || `EA 产品 #${detail.product_id}` }}</strong>
+              <strong>
+                {{ detail.product_name || `EA 产品 #${detail.product_id}` }}
+              </strong>
             </div>
+
             <span class="status" :class="`status-${detail.status}`">
               {{ statusLabel(detail.status) }}
             </span>
           </div>
 
           <div class="detail-rows">
-            <div><span>订单编号</span><strong>{{ detail.order_no }}</strong></div>
-            <div><span>订单金额</span><strong>{{ formatAmount(detail.amount, detail.currency) }}</strong></div>
-            <div><span>支付方式</span><strong>{{ paymentLabel(detail.payment_method) }}</strong></div>
-            <div><span>创建时间</span><strong>{{ formatDate(detail.created_at) }}</strong></div>
-            <div><span>付款时间</span><strong>{{ formatDate(detail.paid_at) }}</strong></div>
-            <div><span>订单过期时间</span><strong>{{ formatDate(detail.expires_at) }}</strong></div>
+            <div>
+              <span>订单编号</span>
+              <strong>{{ detail.order_no }}</strong>
+            </div>
+            <div>
+              <span>订单金额</span>
+              <strong>{{ formatAmount(detail.amount, detail.currency) }}</strong>
+            </div>
+            <div>
+              <span>支付方式</span>
+              <strong>{{ paymentLabel(detail.payment_method) }}</strong>
+            </div>
+            <div>
+              <span>创建时间</span>
+              <strong>{{ formatDate(detail.created_at) }}</strong>
+            </div>
+            <div>
+              <span>付款时间</span>
+              <strong>{{ formatDate(detail.paid_at) }}</strong>
+            </div>
+            <div>
+              <span>订单过期时间</span>
+              <strong>{{ formatDate(detail.expires_at) }}</strong>
+            </div>
           </div>
 
           <div v-if="license" class="license-result">
             <span>关联授权码</span>
             <strong>{{ license.license_key }}</strong>
-            <router-link to="/licenses" class="text-link">前往我的授权</router-link>
+            <router-link to="/licenses" class="text-link">
+              前往我的授权
+            </router-link>
           </div>
 
           <div class="modal-actions">
@@ -161,32 +213,37 @@
             >
               {{ licenseLoading ? '查询中…' : '查询关联授权' }}
             </button>
+
             <button
               v-if="detail.status === 'pending'"
               class="primary-btn"
               :disabled="busyOrder === detail.order_no"
               @click="handleCancel(detail)"
             >
-              取消订单
+              {{ busyOrder === detail.order_no ? '处理中…' : '取消订单' }}
             </button>
-            <button class="secondary-btn" @click="closeDetails">关闭</button>
+
+            <button class="secondary-btn" @click="closeDetails">
+              关闭
+            </button>
           </div>
         </template>
       </section>
     </div>
   </main>
 </template>
-import { useRouter } from 'vue-router'
 
-const router = useRouter()
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import {
   fetchOrders,
   fetchOrder,
   cancelOrder,
   fetchOrderLicense
 } from '../services/account'
+
+const router = useRouter()
 
 const orders = ref([])
 const loading = ref(true)
@@ -239,15 +296,23 @@ function paymentLabel(method) {
 
 function formatAmount(amount, currency) {
   if (amount == null) return '—'
+
   const value = Number(amount)
-  if (!Number.isFinite(value)) return `${amount} ${currency || ''}`.trim()
+
+  if (!Number.isFinite(value)) {
+    return `${amount} ${currency || ''}`.trim()
+  }
+
   return `${currency === 'USDT' ? '₮' : '¥'}${value.toFixed(2)}`
 }
 
 function formatDate(value) {
   if (!value) return '—'
+
   const date = new Date(value)
+
   if (Number.isNaN(date.getTime())) return '—'
+
   return date.toLocaleString('zh-CN', { hour12: false })
 }
 
@@ -264,7 +329,8 @@ async function loadOrders() {
   loadError.value = ''
 
   try {
-    orders.value = await fetchOrders()
+    const result = await fetchOrders()
+    orders.value = Array.isArray(result) ? result : []
   } catch (error) {
     loadError.value = error.message || '订单加载失败'
   } finally {
@@ -278,6 +344,7 @@ async function openDetails(order) {
   detailError.value = ''
   license.value = null
   detailLoading.value = true
+  licenseLoading.value = false
 
   try {
     detail.value = await fetchOrder(order.order_no)
@@ -293,6 +360,7 @@ function closeDetails() {
   detail.value = null
   detailError.value = ''
   license.value = null
+  licenseLoading.value = false
 }
 
 async function handleCancel(order) {
@@ -306,6 +374,7 @@ async function handleCancel(order) {
   try {
     await cancelOrder(order.order_no)
     showNotice('订单已取消')
+
     await loadOrders()
 
     if (selectedOrder.value?.order_no === order.order_no) {
@@ -320,6 +389,7 @@ async function handleCancel(order) {
 
 async function loadOrderLicense(orderNo) {
   licenseLoading.value = true
+  detailError.value = ''
 
   try {
     license.value = await fetchOrderLicense(orderNo)
@@ -836,7 +906,9 @@ h1 {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @media (max-width: 680px) {
@@ -901,4 +973,3 @@ h1 {
   }
 }
 </style>
-
