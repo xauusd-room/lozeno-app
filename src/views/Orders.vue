@@ -125,6 +125,15 @@
             >
               {{ busyOrder === order.order_no ? '查询中…' : '查看授权' }}
             </button>
+
+            <button
+              v-if="order.status === 'paid'"
+              class="text-btn"
+              :disabled="downloadingOrder === order.order_no"
+              @click="handleDownload(order)"
+            >
+              {{ downloadingOrder === order.order_no ? '下载中…' : '下载 EA' }}
+            </button>
           </div>
         </article>
       </div>
@@ -206,6 +215,15 @@
 
           <div class="modal-actions">
             <button
+              v-if="detail.status === 'paid'"
+              class="primary-btn"
+              :disabled="downloadingOrder === detail.order_no"
+              @click="handleDownload(detail)"
+            >
+              {{ downloadingOrder === detail.order_no ? '下载中…' : '下载 EA' }}
+            </button>
+
+            <button
               v-if="detail.status === 'paid' && !license"
               class="primary-btn"
               :disabled="licenseLoading"
@@ -240,7 +258,8 @@ import {
   fetchOrders,
   fetchOrder,
   cancelOrder,
-  fetchOrderLicense
+  fetchOrderLicense,
+  downloadOrderEA
 } from '../services/account'
 
 const router = useRouter()
@@ -250,6 +269,7 @@ const loading = ref(true)
 const loadError = ref('')
 const activeFilter = ref('all')
 const busyOrder = ref('')
+const downloadingOrder = ref('')
 
 const selectedOrder = ref(null)
 const detail = ref(null)
@@ -410,6 +430,22 @@ async function viewLicense(order) {
     showNotice(error.message || '授权查询失败', 'error')
   } finally {
     busyOrder.value = ''
+  }
+}
+
+async function handleDownload(order) {
+  if (order.status !== 'paid' || downloadingOrder.value) return
+
+  downloadingOrder.value = order.order_no
+  notice.value = { text: '', type: 'success' }
+
+  try {
+    await downloadOrderEA(order.order_no)
+    showNotice('EA 文件下载已开始')
+  } catch (error) {
+    showNotice(error.message || 'EA 下载失败，请稍后重试', 'error')
+  } finally {
+    downloadingOrder.value = ''
   }
 }
 
@@ -656,6 +692,7 @@ h1 {
 
 .order-foot {
   justify-content: flex-end;
+  flex-wrap: wrap;
   padding-top: 15px;
   border-top: 1px solid #252936;
 }
