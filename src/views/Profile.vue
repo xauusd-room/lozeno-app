@@ -1,3 +1,4 @@
+
 <template>
   <main class="account-page">
     <div class="page-heading">
@@ -32,13 +33,13 @@
               <input type="file" accept="image/png,image/jpeg,image/webp" @change="handleAvatarSelect" />
             </label>
             <button
-  class="avatar-save-btn"
-  type="button"
-  :disabled="savingAvatar || !form.avatar_data_url"
-  @click="saveAvatar"
->
-  {{ savingAvatar ? '保存中…' : '保存头像' }}
-</button>
+              class="avatar-save-btn"
+              type="button"
+              :disabled="savingAvatar || !form.avatar_data_url"
+              @click="saveAvatar"
+            >
+              {{ savingAvatar ? '保存中…' : '保存头像' }}
+            </button>
           </div>
           <div class="profile-identity">
             <h2>{{ profile.display_name || 'LOZENO 用户' }}</h2>
@@ -298,7 +299,12 @@ async function handleAvatarSelect(event) {
 }
 
 async function saveAvatar() {
-  if (savingAvatar.value || !avatarPending.value || !form.avatar_data_url) return
+  if (savingAvatar.value) return
+
+  if (!form.avatar_data_url) {
+    showNotice('请先选择头像图片', 'error')
+    return
+  }
 
   savingAvatar.value = true
   notice.text = ''
@@ -310,11 +316,11 @@ async function saveAvatar() {
 
     profile.value = { ...profile.value, ...user }
     form.avatar_data_url = user.avatar_data_url || form.avatar_data_url
-    setCurrentUser({ ...profile.value, ...user })
+    setCurrentUser(profile.value)
     avatarPending.value = false
     showNotice('头像已保存')
   } catch (error) {
-    showNotice(error.message || '头像保存失败，请检查后端是否支持头像保存', 'error')
+    showNotice(error.message || '头像保存失败', 'error')
   } finally {
     savingAvatar.value = false
   }
