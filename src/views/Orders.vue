@@ -177,7 +177,9 @@
     </div>
   </main>
 </template>
+import { useRouter } from 'vue-router'
 
+const router = useRouter()
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import {
@@ -334,7 +336,7 @@ async function viewLicense(order) {
 
   try {
     await fetchOrderLicense(order.order_no)
-    window.location.href = '/EA/licenses'
+    await router.push('/licenses')
   } catch (error) {
     showNotice(error.message || '授权查询失败', 'error')
   } finally {
