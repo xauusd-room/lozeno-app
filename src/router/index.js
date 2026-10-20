@@ -20,7 +20,7 @@ export default createRouter({
 
     { path: '/profile', component: Profile },
     { path: '/orders', component: Orders },
-    { path: '/licenses', component: Licenses }
-    { path: '/live', component: LiveTrading }
+    { path: '/licenses', component: Licenses },
+    { path: '/live', component: LiveTrading },
   ]
 })
