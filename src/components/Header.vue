@@ -1,4 +1,3 @@
-
 <template>
   <header class="header">
     <div class="header-inner page-container">
@@ -10,6 +9,7 @@
       <nav class="nav" :class="{'mobile-open':mobileMenuOpen}" aria-label="主导航">
         <router-link to="/" @click="mobileMenuOpen=false"><svg viewBox="0 0 24 24"><path d="m3 10 9-7 9 7"/><path d="M5 9v12h14V9M9 21v-7h6v7"/></svg><span>首页</span></router-link>
         <router-link to="/market" @click="mobileMenuOpen=false"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="m7 14 4-4 4 3 6-7"/></svg><span>行情</span></router-link>
+        <router-link to="/live" @click="mobileMenuOpen=false"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m10 8 6 4-6 4z"/></svg><span>实盘直播</span></router-link>
         <router-link to="/ranking" @click="mobileMenuOpen=false"><svg viewBox="0 0 24 24"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M7 6H3v2a5 5 0 0 0 5 5M17 6h4v2a5 5 0 0 1-5 5"/></svg><span>EA排名</span></router-link>
         <router-link to="/plugins" @click="mobileMenuOpen=false"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span>插件</span></router-link>
         <router-link to="/events" @click="mobileMenuOpen=false"><svg viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="13" rx="2"/><path d="M12 8v13M3 12h18M12 8H7a3 3 0 1 1 3-3c0 2 2 3 2 3Zm0 0h5a3 3 0 1 0-3-3c0 2-2 3-2 3Z"/></svg><span>活动</span></router-link>
@@ -50,7 +50,7 @@ onMounted(()=>{document.addEventListener('click',handleDocumentClick);document.a
 onBeforeUnmount(()=>{document.removeEventListener('click',handleDocumentClick);document.removeEventListener('keydown',handleDocumentKeydown)})
 async function handleLogout(){try{await logout()}catch(error){console.error('退出登录请求失败：',error)}setCurrentUser(null);userMenuOpen.value=false}
 onMounted(async()=>{if(!getToken()){setCurrentUser(null);return}try{setCurrentUser(await getCurrentUser())}catch{setCurrentUser(null)}})
-const items=[{name:'EA排名',url:'/ranking',keywords:'EA 自动交易 机器人 排名 策略'},{name:'插件',url:'/plugins',keywords:'插件 工具 扩展 指标'},{name:'活动',url:'/events',keywords:'活动 优惠 公告'},{name:'行情',url:'/market',keywords:'行情 黄金 XAUUSD 价格'},{name:'首页',url:'/',keywords:'首页 LOZENO'}]
+const items=[{name:'EA排名',url:'/ranking',keywords:'EA 自动交易 机器人 排名 策略'},{name:'插件',url:'/plugins',keywords:'插件 工具 扩展 指标'},{name:'活动',url:'/events',keywords:'活动 优惠 公告'},{name:'行情',url:'/market',keywords:'行情 黄金 XAUUSD 价格'},{name:'实盘直播',url:'/live',keywords:'实盘 直播 MT5 黄金 XAUUSD M5 实时交易 AI 分析'},{name:'首页',url:'/',keywords:'首页 LOZENO'}]
 function handleSearch(){const query=searchKeyword.value.trim().toLowerCase();searchResults.value=query?items.filter(i=>(i.name+' '+i.keywords).toLowerCase().includes(query)):[]}
 </script>
 
