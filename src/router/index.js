@@ -9,7 +9,7 @@ import ProductDetail from '../views/ProductDetail.vue'
 import Profile from '../views/Profile.vue'
 import Orders from '../views/Orders.vue'
 import Licenses from '../views/Licenses.vue'
-
+import LiveTrading from '../views/LiveTrading.vue'
 export default createRouter({
   history: createWebHistory(),
   routes: [
@@ -21,5 +21,6 @@ export default createRouter({
     { path: '/profile', component: Profile },
     { path: '/orders', component: Orders },
     { path: '/licenses', component: Licenses }
+    { path: '/live', component: LiveTrading }
   ]
 })
