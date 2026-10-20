@@ -1,71 +1,402 @@
+
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
+import { createChart, CandlestickSeries, createSeriesMarkers } from 'lightweight-charts'
+
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+const CANDLE_URL = `${API_BASE}/api/market/candles`
+const TICK_URL = `${API_BASE}/api/market/tick`
+const TRADES_URL = `${API_BASE}/api/trades`
 
 const instruments = [
-  { id: 'BTCUSD', name: 'BTC', fullName: 'Bitcoin', symbol: 'BITSTAMP:BTCUSD', price: '67,842.50', change: '+1.28%', up: true, color: '#f4b860' },
-  { id: 'ETHUSD', name: 'ETH', fullName: 'Ethereum', symbol: 'COINBASE:ETHUSD', price: '2,485.60', change: '+0.86%', up: true, color: '#9b9fff' },
-  { id: 'XAUUSD', name: 'GOLD', fullName: '黄金现货', symbol: 'OANDA:XAUUSD', price: '4,365.80', change: '-0.32%', up: false, color: '#f3c66b' },
-  { id: 'USOIL', name: 'WTI', fullName: 'WTI 原油', symbol: 'TVC:USOIL', price: '61.42', change: '+0.54%', up: true, color: '#65d9c0' },
-  { id: 'XAGUSD', name: 'SILVER', fullName: '白银现货', symbol: 'OANDA:XAGUSD', price: '52.18', change: '-0.15%', up: false, color: '#b4c5dc' },
-  { id: 'SOLUSD', name: 'SOL', fullName: 'Solana', symbol: 'COINBASE:SOLUSD', price: '184.26', change: '+2.14%', up: true, color: '#a98aff' }
+  { id: 'BTCUSD', name: 'BTC', fullName: 'Bitcoin', price: '--', change: '--', up: true, color: '#f4b860' },
+  { id: 'ETHUSD', name: 'ETH', fullName: 'Ethereum', price: '--', change: '--', up: true, color: '#9b9fff' },
+  { id: 'XAUUSD', name: 'GOLD', fullName: '黄金现货', price: '--', change: '--', up: true, color: '#f3c66b' },
+  { id: 'USOIL', name: 'WTI', fullName: 'WTI 原油', price: '--', change: '--', up: true, color: '#65d9c0' },
+  { id: 'XAGUSD', name: 'SILVER', fullName: '白银现货', price: '--', change: '--', up: true, color: '#b4c5dc' },
+  { id: 'SOLUSD', name: 'SOL', fullName: 'Solana', price: '--', change: '--', up: true, color: '#a98aff' }
 ]
 
 const selectedInstrument = ref('XAUUSD')
-
 const activeInstrument = computed(() =>
   instruments.find(item => item.id === selectedInstrument.value) || instruments[2]
 )
+const dataSymbol = computed(() =>
+  selectedInstrument.value === 'XAUUSD' ? 'XAUUSD.cn' : selectedInstrument.value
+)
+
+const candles = ref([])
+const trades = ref([])
+const latestTick = ref(null)
+const loading = ref(true)
+const dataError = ref('')
+const chartHost = ref(null)
+
+let chart = null
+let candleSeries = null
+let markerSeries = null
+let resizeObserver = null
+let candleTimer = null
+let tickTimer = null
+let tradeTimer = null
+let requestVersion = 0
+let destroyed = false
 
 function selectInstrument(item) {
-  selectedInstrument.value = item.id
+  if (selectedInstrument.value !== item.id) {
+    selectedInstrument.value = item.id
+  }
 }
 
-const tradingViewUrl = computed(() => {
-  const params = new URLSearchParams({
-    symbol: activeInstrument.value.symbol,
-    interval: '5',
-    theme: 'dark',
-    style: '1',
-    locale: 'zh_CN',
-    timezone: 'Etc/UTC',
-    withdateranges: '1',
-    hide_side_toolbar: '0',
-    allow_symbol_change: '1',
-    saveimage: '0',
-    calendar: '0',
-    hideideas: '1'
+function toUnixTime(value) {
+  if (typeof value === 'number') {
+    return Math.floor(value > 1e12 ? value / 1000 : value)
+  }
+  if (typeof value === 'string') {
+    const numeric = Number(value)
+    if (Number.isFinite(numeric) && value.trim() !== '') {
+      return Math.floor(numeric > 1e12 ? numeric / 1000 : numeric)
+    }
+    const parsed = Date.parse(value)
+    if (Number.isFinite(parsed)) return Math.floor(parsed / 1000)
+  }
+  return null
+}
+
+function normalizeCandle(item) {
+  const time = toUnixTime(item.time ?? item.timestamp ?? item.datetime)
+  const open = Number(item.open)
+  const high = Number(item.high)
+  const low = Number(item.low)
+  const close = Number(item.close)
+
+  if (
+    time === null ||
+    ![open, high, low, close].every(Number.isFinite) ||
+    high < low
+  ) return null
+
+  return { time, open, high, low, close }
+}
+
+function responseRows(payload) {
+  if (Array.isArray(payload)) return payload
+  if (Array.isArray(payload?.data)) return payload.data
+  if (Array.isArray(payload?.candles)) return payload.candles
+  if (Array.isArray(payload?.trades)) return payload.trades
+  return []
+}
+
+async function fetchJson(url) {
+  const response = await fetch(url, {
+    cache: 'no-store',
+    headers: { Accept: 'application/json' }
+  })
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  return response.json()
+}
+
+function initChart() {
+  if (!chartHost.value || chart || destroyed) return
+
+  chart = createChart(chartHost.value, {
+    width: chartHost.value.clientWidth || 800,
+    height: chartHost.value.clientHeight || 500,
+    layout: {
+      background: { color: '#141722' },
+      textColor: '#848e9c',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif',
+      fontSize: 11
+    },
+    grid: {
+      vertLines: { color: 'rgba(132,142,156,0.10)' },
+      horzLines: { color: 'rgba(132,142,156,0.10)' }
+    },
+    rightPriceScale: {
+      borderVisible: false,
+      scaleMargins: { top: 0.08, bottom: 0.08 }
+    },
+    timeScale: {
+      borderVisible: false,
+      timeVisible: true,
+      secondsVisible: false,
+      rightOffset: 2,
+      barSpacing: 8,
+      fixLeftEdge: true,
+      fixRightEdge: true
+    },
+    crosshair: {
+      vertLine: { visible: false, labelVisible: false },
+      horzLine: { visible: false, labelVisible: false }
+    },
+    handleScroll: false,
+    handleScale: false,
+    kineticScroll: { mouse: false, touch: false },
+    watermark: { visible: false }
   })
 
-  return `https://www.tradingview.com/widgetembed/?${params.toString()}`
-})
-
-// 临时演示 K 线，后续接入真实行情和波段算法数据。
-const candles = computed(() => {
-  let previous = 42
-
-  return Array.from({ length: 48 }, (_, i) => {
-    const wave = Math.sin(i * 0.49) * 7 + Math.cos(i * 0.21) * 5
-    const open = previous
-    const close = 42 + wave + Math.sin(i * 0.83) * 3
-    const high = Math.max(open, close) + 2 + (i % 4) * 0.7
-    const low = Math.min(open, close) - 2 - (i % 3) * 0.8
-
-    previous = close
-
-    return { i, open, close, high, low, up: close >= open }
+  candleSeries = chart.addSeries(CandlestickSeries, {
+    upColor: '#0ecb81',
+    downColor: '#f6465d',
+    borderUpColor: '#0ecb81',
+    borderDownColor: '#f6465d',
+    wickUpColor: '#0ecb81',
+    wickDownColor: '#f6465d',
+    priceLineVisible: false,
+    lastValueVisible: true
   })
-})
 
-const waveCandles = computed(() =>
-  candles.value.map((c, i) => ({
-    ...c,
-    x: 10 + i * 11.2,
-    yHigh: 18 + (65 - c.high) * 4.1,
-    yLow: 18 + (65 - c.low) * 4.1,
-    yOpen: 18 + (65 - c.open) * 4.1,
-    yClose: 18 + (65 - c.close) * 4.1
-  }))
+  markerSeries = createSeriesMarkers(candleSeries, [])
+
+  resizeObserver = new ResizeObserver(entries => {
+    if (!chart || !entries.length) return
+    const { width, height } = entries[0].contentRect
+    chart.applyOptions({
+      width: Math.max(1, Math.floor(width)),
+      height: Math.max(1, Math.floor(height))
+    })
+  })
+  resizeObserver.observe(chartHost.value)
+}
+
+function tradeTime(trade, type) {
+  const value = type === 'open'
+    ? trade.open_time ?? trade.opened_at ?? trade.entry_time
+    : trade.close_time ?? trade.closed_at ?? trade.exit_time
+
+  return toUnixTime(value)
+}
+
+function tradeDirection(trade) {
+  const value = String(trade.direction ?? trade.type ?? trade.side ?? '').toLowerCase()
+  return ['buy', 'long', '多', '多单', '0'].includes(value) ? 'buy' : 'sell'
+}
+
+function buildMarkers() {
+  const result = []
+
+  for (const trade of trades.value) {
+    const direction = tradeDirection(trade)
+    const openTime = tradeTime(trade, 'open')
+    const closeTime = tradeTime(trade, 'close')
+    const openPrice = Number(trade.open_price ?? trade.entry_price)
+    const closePrice = Number(trade.close_price ?? trade.exit_price)
+
+    if (openTime !== null && Number.isFinite(openPrice)) {
+      result.push({
+        time: openTime,
+        position: direction === 'buy' ? 'belowBar' : 'aboveBar',
+        color: direction === 'buy' ? '#0ecb81' : '#f6465d',
+        shape: direction === 'buy' ? 'arrowUp' : 'arrowDown',
+        text: `${direction === 'buy' ? '买入' : '卖出'} ${openPrice}`
+      })
+    }
+
+    if (closeTime !== null && Number.isFinite(closePrice)) {
+      result.push({
+        time: closeTime,
+        position: direction === 'buy' ? 'aboveBar' : 'belowBar',
+        color: '#315bff',
+        shape: 'circle',
+        text: `平仓 ${closePrice}`
+      })
+    }
+  }
+
+  result.sort((a, b) => a.time - b.time)
+  markerSeries?.setMarkers(result)
+}
+
+function updateDisplayedPrice(price) {
+  if (!Number.isFinite(price)) return
+
+  const item = instruments.find(row => row.id === selectedInstrument.value)
+  if (!item) return
+
+  const previous = Number(item.price.replace(/,/g, ''))
+  item.price = price.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  })
+
+  if (Number.isFinite(previous) && previous > 0) {
+    const change = ((price - previous) / previous) * 100
+    item.change = `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`
+    item.up = change >= 0
+  }
+}
+
+async function loadCandles() {
+  const version = requestVersion
+  try {
+    const payload = await fetchJson(
+      `${CANDLE_URL}?symbol=${encodeURIComponent(dataSymbol.value)}&timeframe=M5`
+    )
+    if (destroyed || version !== requestVersion) return
+
+    const rows = responseRows(payload)
+      .map(normalizeCandle)
+      .filter(Boolean)
+      .sort((a, b) => a.time - b.time)
+
+    const unique = new Map(rows.map(row => [row.time, row]))
+    candles.value = [...unique.values()]
+
+    if (candleSeries && candles.value.length) {
+      candleSeries.setData(candles.value)
+      chart?.timeScale().fitContent()
+    }
+
+    dataError.value = candles.value.length ? '' : '暂无行情数据'
+  } catch (error) {
+    if (version === requestVersion) {
+      dataError.value = '行情接口暂不可用'
+    }
+  } finally {
+    if (version === requestVersion) loading.value = false
+  }
+}
+
+async function loadTick() {
+  const version = requestVersion
+  try {
+    const payload = await fetchJson(
+      `${TICK_URL}?symbol=${encodeURIComponent(dataSymbol.value)}`
+    )
+    if (destroyed || version !== requestVersion) return
+
+    const tick = payload?.data ?? payload
+    const price = Number(tick.price ?? tick.last ?? tick.bid)
+    const time = toUnixTime(tick.time ?? tick.timestamp ?? tick.datetime)
+
+    if (!Number.isFinite(price) || time === null) return
+
+    latestTick.value = { price, time }
+    updateDisplayedPrice(price)
+
+    const currentBarTime = Math.floor(time / 300) * 300
+    const current = candles.value[candles.value.length - 1]
+
+    if (!current) return
+
+    if (currentBarTime === current.time) {
+      const updated = {
+        ...current,
+        high: Math.max(current.high, price),
+        low: Math.min(current.low, price),
+        close: price
+      }
+      candles.value[candles.value.length - 1] = updated
+      candleSeries?.update(updated)
+    } else if (currentBarTime > current.time) {
+      const updated = {
+        time: currentBarTime,
+        open: current.close,
+        high: Math.max(current.close, price),
+        low: Math.min(current.close, price),
+        close: price
+      }
+      candles.value.push(updated)
+      candleSeries?.update(updated)
+    }
+  } catch {
+    // 保留最后一次有效行情；不生成模拟价格。
+  }
+}
+
+async function loadTrades() {
+  const version = requestVersion
+  try {
+    const payload = await fetchJson(
+      `${TRADES_URL}?symbol=${encodeURIComponent(dataSymbol.value)}`
+    )
+    if (destroyed || version !== requestVersion) return
+
+    trades.value = responseRows(payload)
+    buildMarkers()
+  } catch {
+    // 接口不可用时不伪造交易记录。
+  }
+}
+
+function startPolling() {
+  stopPolling()
+  requestVersion++
+  loading.value = true
+  dataError.value = ''
+  candles.value = []
+  trades.value = []
+  latestTick.value = null
+  candleSeries?.setData([])
+  markerSeries?.setMarkers([])
+
+  loadCandles()
+  loadTick()
+  loadTrades()
+
+  candleTimer = window.setInterval(loadCandles, 5000)
+  tickTimer = window.setInterval(loadTick, 200)
+  tradeTimer = window.setInterval(loadTrades, 5000)
+}
+
+function stopPolling() {
+  if (candleTimer) window.clearInterval(candleTimer)
+  if (tickTimer) window.clearInterval(tickTimer)
+  if (tradeTimer) window.clearInterval(tradeTimer)
+  candleTimer = tickTimer = tradeTimer = null
+}
+
+const completedTrades = computed(() =>
+  trades.value.filter(trade => tradeTime(trade, 'close') !== null)
 )
+
+function formatTime(value) {
+  const timestamp = toUnixTime(value)
+  if (timestamp === null) return '--'
+  return new Date(timestamp * 1000).toLocaleString('zh-CN', {
+    hour12: false
+  })
+}
+
+function formatNumber(value, digits = 2) {
+  const number = Number(value)
+  return Number.isFinite(number) ? number.toFixed(digits) : '--'
+}
+
+function tradeDuration(trade) {
+  const open = tradeTime(trade, 'open')
+  const close = tradeTime(trade, 'close')
+  if (open === null || close === null) return '--'
+
+  const minutes = Math.max(0, Math.floor((close - open) / 60))
+  if (minutes < 60) return `${minutes} 分钟`
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  if (hours < 24) return `${hours} 小时 ${rest} 分钟`
+  return `${Math.floor(hours / 24)} 天 ${hours % 24} 小时`
+}
+
+watch(selectedInstrument, async () => {
+  await nextTick()
+  startPolling()
+})
+
+onMounted(async () => {
+  await nextTick()
+  initChart()
+  startPolling()
+})
+
+onBeforeUnmount(() => {
+  destroyed = true
+  stopPolling()
+  requestVersion++
+  resizeObserver?.disconnect()
+  chart?.remove()
+  chart = null
+  candleSeries = null
+  markerSeries = null
+})
 </script>
 
 <template>
@@ -74,7 +405,6 @@ const waveCandles = computed(() =>
     <div class="ambient ambient-purple"></div>
 
     <section class="terminal-frame">
-      <!-- 行情滚动条 -->
       <section class="ticker-section">
         <div class="ticker-viewport">
           <div class="ticker-track">
@@ -110,7 +440,6 @@ const waveCandles = computed(() =>
         </div>
       </section>
 
-      <!-- 三个指标保持在同一排 -->
       <section class="ai-panel">
         <div class="ai-main-row">
           <div class="direction-block">
@@ -132,80 +461,17 @@ const waveCandles = computed(() =>
         </div>
       </section>
 
-      <!-- TradingView 看盘 -->
-      <section class="section-panel tradingview-panel">
-        <div class="tradingview-container">
-          <iframe
-            :key="activeInstrument.symbol"
-            :src="tradingViewUrl"
-            :title="`${activeInstrument.id} TradingView M5 图表`"
-            loading="lazy"
-            allowfullscreen
-            referrerpolicy="no-referrer-when-downgrade"
-          ></iframe>
+      <section class="section-panel chart-panel">
+        <div class="chart-status">
+          <span class="status-dot" :class="{ 'status-live': latestTick }"></span>
+          <span>{{ loading ? '正在读取行情' : dataError || (latestTick ? '实时行情' : '等待行情') }}</span>
+          <span class="chart-symbol">{{ dataSymbol }} · M5</span>
+          <span class="chart-count">{{ candles.length }} 根 K 线</span>
         </div>
+
+        <div ref="chartHost" class="chart-host"></div>
       </section>
 
-      <!-- 自研波段方向图 -->
-      <section class="section-panel wave-panel">
-        <div class="wave-chart">
-          <div class="wave-grid">
-            <div v-for="n in 6" :key="n" class="wave-grid-row"></div>
-            <div v-for="n in 7" :key="`v-${n}`" class="wave-grid-col"></div>
-          </div>
-
-          <svg
-            class="wave-candles"
-            viewBox="0 0 560 300"
-            preserveAspectRatio="none"
-            role="img"
-            aria-label="波段方向 K 线图"
-          >
-            <defs>
-              <linearGradient id="waveGreen" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stop-color="#36f0c1" />
-                <stop offset="100%" stop-color="#00a98f" />
-              </linearGradient>
-            </defs>
-
-            <g v-for="c in waveCandles" :key="c.i">
-              <line
-                :x1="c.x"
-                :x2="c.x"
-                :y1="c.yHigh"
-                :y2="c.yLow"
-                :stroke="c.up ? '#36e9bd' : '#ff5b86'"
-                stroke-width="1"
-              />
-
-              <rect
-                :x="c.x - 3.1"
-                :y="Math.min(c.yOpen, c.yClose)"
-                width="6.2"
-                :height="Math.max(2, Math.abs(c.yClose - c.yOpen))"
-                :fill="c.up ? 'url(#waveGreen)' : '#ff5b86'"
-                opacity=".88"
-              />
-            </g>
-          </svg>
-
-          <div class="wave-price-axis">
-            <span>高点</span>
-            <span>价格轴</span>
-            <span>低点</span>
-          </div>
-
-          <div class="wave-time-axis">
-            <span>历史走势</span>
-            <span>当前波段</span>
-          </div>
-
-          <div class="wave-corner wave-corner-tl"></div>
-          <div class="wave-corner wave-corner-br"></div>
-        </div>
-      </section>
-
-      <!-- 实盘交易记录 -->
       <section class="section-panel history-panel">
         <div class="history-heading">
           <h2>实盘交易记录</h2>
@@ -232,7 +498,23 @@ const waveCandles = computed(() =>
             </thead>
 
             <tbody>
-              <tr>
+              <tr v-for="(trade, index) in [...completedTrades].reverse()" :key="trade.ticket ?? trade.order ?? index">
+                <td>{{ formatTime(trade.open_time ?? trade.opened_at ?? trade.entry_time) }}</td>
+                <td>{{ formatTime(trade.close_time ?? trade.closed_at ?? trade.exit_time) }}</td>
+                <td>{{ trade.symbol ?? dataSymbol }}</td>
+                <td :class="tradeDirection(trade) === 'buy' ? 'profit-text' : 'loss-text'">
+                  {{ tradeDirection(trade) === 'buy' ? '多单' : '空单' }}
+                </td>
+                <td>{{ formatNumber(trade.volume ?? trade.lot, 2) }}</td>
+                <td>{{ formatNumber(trade.open_price ?? trade.entry_price) }}</td>
+                <td>{{ formatNumber(trade.close_price ?? trade.exit_price) }}</td>
+                <td :class="Number(trade.profit ?? trade.pnl) >= 0 ? 'profit-text' : 'loss-text'">
+                  {{ formatNumber(trade.profit ?? trade.pnl) }}
+                </td>
+                <td>{{ tradeDuration(trade) }}</td>
+              </tr>
+
+              <tr v-if="completedTrades.length === 0">
                 <td colspan="9">
                   <div class="empty-history">
                     <span class="empty-history-icon">
@@ -241,7 +523,7 @@ const waveCandles = computed(() =>
                         <path d="M8 8h8M8 12h8M8 16h5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
                       </svg>
                     </span>
-                    <strong>暂无交易记录</strong>
+                    <strong>{{ loading ? '正在读取交易记录' : '暂无交易记录' }}</strong>
                   </div>
                 </td>
               </tr>
@@ -255,9 +537,6 @@ const waveCandles = computed(() =>
 
 <style scoped>
 .live-page {
-  --blue: #426bff;
-  --cyan: #00dfff;
-  --purple: #a16bff;
   --line: var(--边框线条颜色, #222630);
   position: relative;
   isolation: isolate;
@@ -293,7 +572,6 @@ const waveCandles = computed(() =>
   pointer-events: none;
   opacity: .06;
 }
-
 .ambient-blue { top: 200px; left: -250px; background: #126bff; }
 .ambient-purple { top: 780px; right: -260px; background: #9c3dff; }
 
@@ -307,12 +585,6 @@ const waveCandles = computed(() =>
   box-shadow: none;
 }
 
-.terminal-frame::before,
-.terminal-frame::after {
-  display: none;
-}
-
-/* 行情滚动条：无背景、无边框、无下划线 */
 .ticker-section,
 .ticker-viewport {
   padding: 0;
@@ -327,10 +599,7 @@ const waveCandles = computed(() =>
   width: max-content;
   animation: ticker-scroll 38s linear infinite;
 }
-
-.ticker-viewport:hover .ticker-track {
-  animation-play-state: paused;
-}
+.ticker-viewport:hover .ticker-track { animation-play-state: paused; }
 
 .ticker-item {
   display: flex;
@@ -341,19 +610,13 @@ const waveCandles = computed(() =>
   color: var(--主要文字颜色, #fff);
   text-align: left;
   border: 0;
-  border-bottom: 0;
   outline: 0;
   background: transparent;
   box-shadow: none;
   cursor: pointer;
 }
-
 .ticker-item:hover,
-.ticker-item.selected {
-  border: 0;
-  background: transparent;
-  box-shadow: none;
-}
+.ticker-item.selected { border: 0; background: transparent; box-shadow: none; }
 
 .ticker-symbol-icon {
   display: grid;
@@ -367,63 +630,21 @@ const waveCandles = computed(() =>
   font-size: 12px;
   font-weight: 800;
 }
-
-.ticker-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 64px;
-}
-
-.ticker-name {
-  color: var(--主要文字颜色, #fff);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: .5px;
-}
-
-.ticker-full-name {
-  color: var(--次要灰色文字, #848e9c);
-  font-size: 9px;
-}
-
-.ticker-quote {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-left: auto;
-  text-align: right;
-}
-
-.ticker-quote strong {
-  color: var(--主要文字颜色, #fff);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-}
-
+.ticker-info { display: flex; flex-direction: column; gap: 4px; min-width: 64px; }
+.ticker-name { color: var(--主要文字颜色, #fff); font-size: 11px; font-weight: 800; letter-spacing: .5px; }
+.ticker-full-name { color: var(--次要灰色文字, #848e9c); font-size: 9px; }
+.ticker-quote { display: flex; flex-direction: column; gap: 4px; margin-left: auto; text-align: right; }
+.ticker-quote strong { color: var(--主要文字颜色, #fff); font-size: 11px; font-variant-numeric: tabular-nums; }
 .ticker-quote small { font-size: 10px; }
-
-.ticker-up .ticker-quote small,
-.ticker-up .ticker-arrow {
-  color: var(--涨势绿色, #0ecb81);
-}
-
-.ticker-down .ticker-quote small,
-.ticker-down .ticker-arrow {
-  color: var(--跌势红色, #f6465d);
-}
-
-.ticker-arrow {
-  align-self: flex-start;
-  font-size: 14px;
-}
+.ticker-up .ticker-quote small, .ticker-up .ticker-arrow { color: var(--涨势绿色, #0ecb81); }
+.ticker-down .ticker-quote small, .ticker-down .ticker-arrow { color: var(--跌势红色, #f6465d); }
+.ticker-arrow { align-self: flex-start; font-size: 14px; }
 
 @keyframes ticker-scroll {
   from { transform: translateX(0); }
   to { transform: translateX(-50%); }
 }
 
-/* 三项指标保持在同一排 */
 .ai-panel {
   position: relative;
   padding: 20px 22px 14px;
@@ -431,7 +652,6 @@ const waveCandles = computed(() =>
   border: 0;
   background: transparent;
 }
-
 .ai-main-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -439,212 +659,65 @@ const waveCandles = computed(() =>
   gap: 24px;
   min-height: 104px;
 }
-
-.direction-block,
-.ai-metric {
-  min-width: 0;
-}
-
-.direction-block small,
-.ai-metric > small {
+.direction-block, .ai-metric { min-width: 0; }
+.direction-block small, .ai-metric > small {
   display: block;
   color: var(--次要灰色文字, #848e9c);
   font-size: 10px;
 }
-
-.direction-block strong,
-.ai-metric strong {
+.direction-block strong, .ai-metric strong {
   display: block;
   margin-top: 8px;
   color: var(--主要文字颜色, #fff);
   font-size: 22px;
   font-weight: 700;
 }
-
 .direction-block strong span {
   margin-left: 6px;
   color: var(--次要灰色文字, #848e9c);
   font-size: 12px;
   font-weight: 500;
 }
-
-.ai-metric strong span {
-  margin-left: 3px;
-  color: var(--次要灰色文字, #848e9c);
-  font-size: 12px;
-}
-
-.metric-track {
-  width: 100%;
-  max-width: 170px;
-  height: 3px;
-  margin-top: 9px;
-  overflow: hidden;
-  background: var(--边框线条颜色, #222630);
-}
-
-.metric-track span {
-  display: block;
-  width: 0;
-  height: 100%;
-}
-
+.ai-metric strong span { margin-left: 3px; color: var(--次要灰色文字, #848e9c); font-size: 12px; }
+.metric-track { width: 100%; max-width: 170px; height: 3px; margin-top: 9px; overflow: hidden; background: var(--边框线条颜色, #222630); }
+.metric-track span { display: block; width: 0; height: 100%; }
 .track-blue { background: var(--主色调蓝色, #315bff); }
 .track-purple { background: #8b70ff; }
 
-/* 图表 */
-.section-panel {
-  min-width: 0;
-  padding: 20px;
-  border: 0;
-  background: transparent;
-}
+.section-panel { min-width: 0; padding: 20px; border: 0; background: transparent; }
 
-.tradingview-container {
+.chart-panel { padding-top: 12px; }
+.chart-status {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 30px;
+  color: var(--次要灰色文字, #848e9c);
+  font-size: 11px;
+}
+.status-dot { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: #848e9c; }
+.status-dot.status-live { background: #0ecb81; }
+.chart-symbol { margin-left: auto; color: var(--主要文字颜色, #fff); }
+.chart-count { white-space: nowrap; }
+.chart-host {
   position: relative;
   width: 100%;
   height: clamp(420px, 49vw, 660px);
   min-height: 360px;
   overflow: hidden;
-  border: 0;
   background: var(--表面卡片背景色, #141722);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
-.tradingview-container iframe {
-  display: block;
-  width: 100%;
-  height: 100%;
-  border: 0;
-  background: var(--表面卡片背景色, #141722);
-}
-
-/* 自研波段 K 线图 */
-.wave-panel { background: transparent; }
-
-.wave-chart {
-  position: relative;
-  height: clamp(300px, 36vw, 450px);
-  overflow: hidden;
-  border: 0;
-  background: var(--表面卡片背景色, #141722);
-}
-
-.wave-grid {
-  position: absolute;
-  inset: 0 54px 25px 0;
-}
-
-.wave-grid-row {
-  height: 16.666%;
-  border-bottom: 1px solid rgba(132, 142, 156, .12);
-}
-
-.wave-grid-col {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: rgba(132, 142, 156, .1);
-}
-
-.wave-grid-col:nth-of-type(7) { left: 15%; }
-.wave-grid-col:nth-of-type(8) { left: 30%; }
-.wave-grid-col:nth-of-type(9) { left: 45%; }
-.wave-grid-col:nth-of-type(10) { left: 60%; }
-.wave-grid-col:nth-of-type(11) { left: 75%; }
-.wave-grid-col:nth-of-type(12) { left: 90%; }
-
-.wave-candles {
-  position: absolute;
-  inset: 0 48px 25px 0;
-  width: calc(100% - 48px);
-  height: calc(100% - 25px);
-}
-
-.wave-price-axis {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  bottom: 35px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  color: var(--次要灰色文字, #848e9c);
-  font-size: 8px;
-}
-
-.wave-time-axis {
-  position: absolute;
-  right: 60px;
-  bottom: 8px;
-  left: 12px;
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  color: var(--次要灰色文字, #848e9c);
-  font-size: 9px;
-}
-
-.wave-corner {
-  position: absolute;
-  width: 12px;
-  height: 12px;
-  pointer-events: none;
-}
-
-.wave-corner-tl {
-  top: 0;
-  left: 0;
-  border-top: 1px solid #a16bff;
-  border-left: 1px solid #a16bff;
-}
-
-.wave-corner-br {
-  right: 53px;
-  bottom: 24px;
-  border-right: 1px solid #a16bff;
-  border-bottom: 1px solid #a16bff;
-}
-
-/* 实盘交易记录 */
 .history-panel { padding-bottom: 16px; }
-
-.history-heading {
-  margin-bottom: 18px;
-}
-
-.history-heading h2 {
-  color: var(--主要文字颜色, #fff);
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.history-overview {
-  display: flex;
-  align-items: center;
-  margin-bottom: 15px;
-}
-
-.history-description {
-  color: var(--次要灰色文字, #848e9c);
-  font-size: 11px;
-  font-weight: 500;
-}
-
-.history-table-wrap {
-  width: 100%;
-  overflow-x: auto;
-  border: 1px solid var(--边框线条颜色, #222630);
-  background: var(--表面卡片背景色, #141722);
-}
-
-.history-table {
-  width: 100%;
-  min-width: 850px;
-  border-collapse: collapse;
-  text-align: left;
-}
-
+.history-heading { margin-bottom: 18px; }
+.history-heading h2 { color: var(--主要文字颜色, #fff); font-size: 14px; font-weight: 700; }
+.history-overview { display: flex; align-items: center; margin-bottom: 15px; }
+.history-description { color: var(--次要灰色文字, #848e9c); font-size: 11px; font-weight: 500; }
+.history-table-wrap { width: 100%; overflow-x: auto; border: 1px solid var(--边框线条颜色, #222630); background: var(--表面卡片背景色, #141722); }
+.history-table { width: 100%; min-width: 850px; border-collapse: collapse; text-align: left; }
 .history-table th {
   height: 42px;
   padding: 0 13px;
@@ -655,9 +728,9 @@ const waveCandles = computed(() =>
   font-weight: 600;
   white-space: nowrap;
 }
-
-.history-table td { padding: 0; }
-.history-table tbody tr { height: 200px; }
+.history-table td { padding: 12px 13px; color: var(--主要文字颜色, #fff); font-size: 11px; white-space: nowrap; border-bottom: 1px solid rgba(132,142,156,.08); }
+.profit-text { color: var(--涨势绿色, #0ecb81) !important; }
+.loss-text { color: var(--跌势红色, #f6465d) !important; }
 
 .empty-history {
   display: flex;
@@ -669,7 +742,6 @@ const waveCandles = computed(() =>
   padding: 28px 12px;
   text-align: center;
 }
-
 .empty-history-icon {
   display: grid;
   width: 42px;
@@ -679,53 +751,30 @@ const waveCandles = computed(() =>
   border: 1px solid var(--边框线条颜色, #222630);
   background: transparent;
 }
-
-.empty-history-icon svg {
-  width: 21px;
-  height: 21px;
-}
-
-.empty-history strong {
-  color: var(--次要灰色文字, #848e9c);
-  font-size: 12px;
-}
+.empty-history-icon svg { width: 21px; height: 21px; }
+.empty-history strong { color: var(--次要灰色文字, #848e9c); font-size: 12px; }
 
 @media (prefers-reduced-motion: reduce) {
   .ticker-track { animation: none; }
 }
-
 @media (min-width: 1600px) {
   .live-page { padding-inline: 36px; }
 }
-
 @media (max-width: 850px) {
   .live-page { padding: 24px 14px 34px; }
   .ai-main-row { gap: 16px; }
-  .tradingview-container { height: 480px; }
-  .wave-chart { height: 350px; }
+  .chart-host { height: 480px; }
   .section-panel { padding: 17px; }
 }
-
 @media (max-width: 520px) {
   .live-page { padding: 20px 9px 28px; }
-
-  .ticker-item {
-    min-width: 205px;
-    padding: 13px 12px;
-  }
-
+  .ticker-item { min-width: 205px; padding: 13px 12px; }
   .ai-panel { padding: 16px 12px 12px; }
   .ai-main-row { gap: 12px; }
-  .direction-block strong,
-  .ai-metric strong { font-size: 18px; }
-
+  .direction-block strong, .ai-metric strong { font-size: 18px; }
   .section-panel { padding: 14px 9px; }
-
-  .tradingview-container {
-    height: 430px;
-    min-height: 350px;
-  }
-
-  .wave-chart { height: 280px; }
+  .chart-host { height: 430px; min-height: 350px; }
+  .chart-status { gap: 6px; font-size: 10px; }
+  .chart-count { display: none; }
 }
 </style>
