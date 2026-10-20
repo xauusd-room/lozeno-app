@@ -39,7 +39,7 @@ const tradingViewUrl = computed(() => {
   return `https://www.tradingview.com/widgetembed/?${params.toString()}`
 })
 
-// 以下 K 线仅用于搭建自研波段图的视觉结构，后续替换为真实算法数据。
+// 临时演示 K 线，后续接入真实行情和波段算法数据。
 const candles = computed(() => {
   let previous = 42
 
@@ -66,9 +66,6 @@ const waveCandles = computed(() =>
     yClose: 18 + (65 - c.close) * 4.1
   }))
 )
-
-const historyFilters = ['全部记录', '多单', '空单']
-const activeHistoryFilter = ref('全部记录')
 </script>
 
 <template>
@@ -77,7 +74,7 @@ const activeHistoryFilter = ref('全部记录')
     <div class="ambient ambient-purple"></div>
 
     <section class="terminal-frame">
-      <!-- 行情滚动条：透明背景，无外边框 -->
+      <!-- 行情滚动条 -->
       <section class="ticker-section">
         <div class="ticker-viewport">
           <div class="ticker-track">
@@ -113,7 +110,7 @@ const activeHistoryFilter = ref('全部记录')
         </div>
       </section>
 
-      <!-- AI 分析数据区域：保留数据位置，删除标题和说明 -->
+      <!-- 三个指标保持在同一排 -->
       <section class="ai-panel">
         <div class="ai-main-row">
           <div class="direction-block">
@@ -121,64 +118,22 @@ const activeHistoryFilter = ref('全部记录')
             <strong class="direction-neutral">-- <span>待计算</span></strong>
           </div>
 
-          <div class="ai-divider"></div>
-
           <div class="ai-metric">
             <small>预测概率</small>
             <strong>--<span>%</span></strong>
             <div class="metric-track"><span class="track-blue"></span></div>
           </div>
 
-          <div class="ai-divider"></div>
-
           <div class="ai-metric">
             <small>波段进度</small>
             <strong>--<span>%</span></strong>
             <div class="metric-track"><span class="track-purple"></span></div>
           </div>
-
-          <div class="ai-divider"></div>
-
-          <div class="ai-summary">
-            <span class="summary-icon">⌁</span>
-            <div>
-              <small>分析状态</small>
-              <strong>{{ activeInstrument.id }} · M5 · 等待数据</strong>
-            </div>
-          </div>
         </div>
       </section>
 
-      <!-- TradingView 图表 -->
+      <!-- TradingView 看盘 -->
       <section class="section-panel tradingview-panel">
-        <div class="panel-heading">
-          <div class="panel-title">
-            <span class="panel-index">01</span>
-            <div>
-              <h2>沉浸式看盘</h2>
-              <p>TRADINGVIEW · INTERACTIVE CHART</p>
-            </div>
-          </div>
-
-          <div class="chart-meta">
-            <span class="selected-symbol">{{ activeInstrument.id }}</span>
-            <span class="period-badge">M5</span>
-          </div>
-        </div>
-
-        <div class="tradingview-toolbar">
-          <div class="toolbar-instrument">
-            <span class="instrument-dot"></span>
-            <strong>{{ activeInstrument.fullName }}</strong>
-            <span>{{ activeInstrument.id }}</span>
-          </div>
-
-          <div class="toolbar-right">
-            <span class="toolbar-period-active">M5</span>
-            <span class="toolbar-hint">5 分钟周期</span>
-          </div>
-        </div>
-
         <div class="tradingview-container">
           <iframe
             :key="activeInstrument.symbol"
@@ -189,50 +144,11 @@ const activeHistoryFilter = ref('全部记录')
             referrerpolicy="no-referrer-when-downgrade"
           ></iframe>
         </div>
-
-        <div class="chart-panel-footer">
-          <span><i class="legend-tv"></i> TradingView 图表</span>
-          <span>品种：{{ activeInstrument.id }}</span>
-          <span>周期：M5</span>
-        </div>
       </section>
 
-      <!-- 自研波段方向 K 线 -->
+      <!-- 自研波段方向图 -->
       <section class="section-panel wave-panel">
-        <div class="panel-heading">
-          <div class="panel-title">
-            <span class="panel-index purple-index">02</span>
-            <div>
-              <h2>波段方向分析</h2>
-              <p>LOZENO · CUSTOM WAVE DIRECTION MODEL</p>
-            </div>
-          </div>
-
-          <div class="chart-meta">
-            <span class="selected-symbol">{{ activeInstrument.id }}</span>
-            <span class="period-badge">M5</span>
-            <span class="panel-badge purple-badge">演示图形</span>
-          </div>
-        </div>
-
-        <div class="wave-toolbar">
-          <div class="toolbar-instrument">
-            <span class="instrument-dot purple-dot"></span>
-            <strong>{{ activeInstrument.fullName }}</strong>
-            <span>{{ activeInstrument.id }}</span>
-          </div>
-
-          <div class="wave-legend">
-            <span><i class="legend-up"></i> 上涨 K 线</span>
-            <span><i class="legend-down"></i> 下跌 K 线</span>
-            <span><i class="legend-projection"></i> 预测区域预留</span>
-          </div>
-        </div>
-
         <div class="wave-chart">
-          <div class="wave-watermark">LOZENO</div>
-          <div class="wave-watermark-sub">WAVE DIRECTION · M5</div>
-
           <div class="wave-grid">
             <div v-for="n in 6" :key="n" class="wave-grid-row"></div>
             <div v-for="n in 7" :key="`v-${n}`" class="wave-grid-col"></div>
@@ -243,7 +159,7 @@ const activeHistoryFilter = ref('全部记录')
             viewBox="0 0 560 300"
             preserveAspectRatio="none"
             role="img"
-            aria-label="自研波段方向图演示数据"
+            aria-label="波段方向 K 线图"
           >
             <defs>
               <linearGradient id="waveGreen" x1="0" y1="0" x2="0" y2="1">
@@ -282,51 +198,21 @@ const activeHistoryFilter = ref('全部记录')
           <div class="wave-time-axis">
             <span>历史走势</span>
             <span>当前波段</span>
-            <span>预测区域待接入</span>
           </div>
 
           <div class="wave-corner wave-corner-tl"></div>
           <div class="wave-corner wave-corner-br"></div>
         </div>
-
-        <div class="wave-footer">
-          <span><i class="legend-up"></i> 上涨 K 线</span>
-          <span><i class="legend-down"></i> 下跌 K 线</span>
-          <span class="footer-note">当前为布局演示数据，后续替换为真实 M5 行情和波段算法输出</span>
-        </div>
       </section>
 
       <!-- 实盘交易记录 -->
       <section class="section-panel history-panel">
-        <div class="panel-heading history-heading">
-          <div class="panel-title">
-            <span class="panel-index">03</span>
-            <div>
-              <h2>实盘交易记录</h2>
-              <p>LIVE TRADE HISTORY · REAL EXECUTIONS</p>
-            </div>
-          </div>
-
-          <span class="history-status"><i></i> 数据库待接入</span>
+        <div class="history-heading">
+          <h2>实盘交易记录</h2>
         </div>
 
         <div class="history-overview">
-          <div class="history-description">
-            <strong>真实成交记录</strong>
-            <span>展示实际开仓、平仓及盈亏结果，不使用模拟交易记录。</span>
-          </div>
-
-          <div class="history-filters">
-            <button
-              v-for="filter in historyFilters"
-              :key="filter"
-              type="button"
-              :class="{ active: activeHistoryFilter === filter }"
-              @click="activeHistoryFilter = filter"
-            >
-              {{ filter }}
-            </button>
-          </div>
+          <strong class="history-description">真实成交记录</strong>
         </div>
 
         <div class="history-table-wrap">
@@ -355,20 +241,12 @@ const activeHistoryFilter = ref('全部记录')
                         <path d="M8 8h8M8 12h8M8 16h5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
                       </svg>
                     </span>
-
                     <strong>暂无交易记录</strong>
-                    <span>接入真实交易数据库后，这里将展示实际成交历史。</span>
-                    <small>TRADE HISTORY · WAITING FOR DATA SOURCE</small>
                   </div>
                 </td>
               </tr>
             </tbody>
           </table>
-        </div>
-
-        <div class="history-table-footer">
-          <span>记录来源：待配置</span>
-          <span>当前显示 0 条记录</span>
         </div>
       </section>
     </section>
@@ -434,15 +312,11 @@ const activeHistoryFilter = ref('全部记录')
   display: none;
 }
 
-/* 行情滚动栏：直接融入网页 */
-.ticker-section {
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
-
+/* 行情滚动条：无背景、无边框、无下划线 */
+.ticker-section,
 .ticker-viewport {
-  margin-top: 0;
+  padding: 0;
+  margin: 0;
   overflow: hidden;
   border: 0;
   background: transparent;
@@ -467,18 +341,18 @@ const activeHistoryFilter = ref('全部记录')
   color: var(--主要文字颜色, #fff);
   text-align: left;
   border: 0;
+  border-bottom: 0;
+  outline: 0;
   background: transparent;
+  box-shadow: none;
   cursor: pointer;
-  transition: color .2s;
 }
 
-.ticker-item:hover {
-  background: transparent;
-}
-
+.ticker-item:hover,
 .ticker-item.selected {
+  border: 0;
   background: transparent;
-  box-shadow: inset 0 -2px var(--主色调蓝色, #315bff);
+  box-shadow: none;
 }
 
 .ticker-symbol-icon {
@@ -527,9 +401,7 @@ const activeHistoryFilter = ref('全部记录')
   font-variant-numeric: tabular-nums;
 }
 
-.ticker-quote small {
-  font-size: 10px;
-}
+.ticker-quote small { font-size: 10px; }
 
 .ticker-up .ticker-quote small,
 .ticker-up .ticker-arrow {
@@ -551,67 +423,49 @@ const activeHistoryFilter = ref('全部记录')
   to { transform: translateX(-50%); }
 }
 
-/* AI 数据区域 */
+/* 三项指标保持在同一排 */
 .ai-panel {
   position: relative;
   padding: 20px 22px 14px;
   overflow: hidden;
   border: 0;
-  border-bottom: 1px solid var(--边框线条颜色, #222630);
   background: transparent;
 }
 
-.ai-panel::before {
-  display: none;
-}
-
 .ai-main-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: center;
   gap: 24px;
   min-height: 104px;
 }
 
-.direction-block { min-width: 150px; }
+.direction-block,
+.ai-metric {
+  min-width: 0;
+}
 
 .direction-block small,
-.ai-metric > small,
-.ai-summary small {
+.ai-metric > small {
   display: block;
   color: var(--次要灰色文字, #848e9c);
   font-size: 10px;
 }
 
-.direction-block strong {
+.direction-block strong,
+.ai-metric strong {
   display: block;
   margin-top: 8px;
-  color: var(--次要灰色文字, #848e9c);
-  font-size: 24px;
+  color: var(--主要文字颜色, #fff);
+  font-size: 22px;
+  font-weight: 700;
 }
 
 .direction-block strong span {
   margin-left: 6px;
+  color: var(--次要灰色文字, #848e9c);
   font-size: 12px;
   font-weight: 500;
-}
-
-.ai-divider {
-  width: 1px;
-  height: 42px;
-  background: var(--边框线条颜色, #222630);
-}
-
-.ai-metric {
-  flex: 1;
-  min-width: 100px;
-}
-
-.ai-metric strong {
-  display: block;
-  margin-top: 7px;
-  color: var(--主要文字颜色, #fff);
-  font-size: 22px;
-  font-weight: 700;
 }
 
 .ai-metric strong span {
@@ -638,157 +492,12 @@ const activeHistoryFilter = ref('全部记录')
 .track-blue { background: var(--主色调蓝色, #315bff); }
 .track-purple { background: #8b70ff; }
 
-.ai-summary {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 190px;
-}
-
-.summary-icon {
-  color: var(--主色调蓝色, #315bff);
-  font-size: 26px;
-}
-
-.ai-summary strong {
-  display: block;
-  margin-top: 7px;
-  color: var(--次要灰色文字, #848e9c);
-  font-size: 11px;
-}
-
-/* 图表区域：保留原有结构 */
+/* 图表 */
 .section-panel {
   min-width: 0;
   padding: 20px;
   border: 0;
-  border-bottom: 1px solid var(--边框线条颜色, #222630);
   background: transparent;
-}
-
-.panel-heading,
-.panel-title {
-  display: flex;
-  align-items: center;
-}
-
-.panel-heading {
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.panel-title {
-  gap: 11px;
-  min-width: 0;
-}
-
-.panel-title h2 {
-  color: var(--主要文字颜色, #fff);
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: .4px;
-}
-
-.panel-title p {
-  margin-top: 5px;
-  color: var(--次要灰色文字, #848e9c);
-  font-size: 8px;
-  letter-spacing: 1.2px;
-}
-
-.panel-index {
-  color: var(--主色调蓝色, #315bff);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 1px;
-}
-
-.purple-index { color: #a16bff; }
-
-.chart-meta {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
-
-.selected-symbol {
-  color: var(--主要文字颜色, #fff);
-  font-size: 10px;
-  font-weight: 700;
-}
-
-.period-badge {
-  padding: 5px 9px;
-  color: var(--主要文字颜色, #fff);
-  border: 1px solid var(--边框线条颜色, #222630);
-  background: transparent;
-  font-size: 9px;
-}
-
-.panel-badge {
-  padding: 5px 8px;
-  font-size: 8px;
-  letter-spacing: .7px;
-}
-
-.purple-badge {
-  color: #bba3ff;
-  border: 1px solid var(--边框线条颜色, #222630);
-  background: transparent;
-}
-
-.tradingview-toolbar,
-.wave-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  min-height: 39px;
-  padding: 0 12px;
-  border: 0;
-  border-bottom: 1px solid var(--边框线条颜色, #222630);
-  background: transparent;
-}
-
-.toolbar-instrument,
-.toolbar-right,
-.wave-legend {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.toolbar-instrument strong {
-  color: var(--主要文字颜色, #fff);
-  font-size: 11px;
-}
-
-.toolbar-instrument > span:last-child {
-  color: var(--次要灰色文字, #848e9c);
-  font-size: 10px;
-}
-
-.instrument-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--主色调蓝色, #315bff);
-}
-
-.purple-dot { background: #a16bff; }
-
-.toolbar-period-active {
-  padding: 5px 8px;
-  color: var(--主要文字颜色, #fff);
-  border: 1px solid var(--边框线条颜色, #222630);
-  background: transparent;
-  font-size: 10px;
-}
-
-.toolbar-hint {
-  color: var(--次要灰色文字, #848e9c);
-  font-size: 9px;
 }
 
 .tradingview-container {
@@ -809,69 +518,8 @@ const activeHistoryFilter = ref('全部记录')
   background: var(--表面卡片背景色, #141722);
 }
 
-.chart-panel-footer,
-.wave-footer {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 18px;
-  min-height: 34px;
-  color: var(--次要灰色文字, #848e9c);
-  font-size: 9px;
-}
-
-.chart-panel-footer > span,
-.wave-footer > span {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.legend-tv {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--主色调蓝色, #315bff);
-}
-
-.wave-panel {
-  background: transparent;
-}
-
-.wave-toolbar {
-  border-color: var(--边框线条颜色, #222630);
-  background: transparent;
-}
-
-.wave-legend {
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 12px;
-  color: var(--次要灰色文字, #848e9c);
-  font-size: 9px;
-}
-
-.wave-legend span {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.legend-up,
-.legend-down {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-}
-
-.legend-up { background: var(--涨势绿色, #0ecb81); }
-.legend-down { background: var(--跌势红色, #f6465d); }
-
-.legend-projection {
-  width: 14px;
-  height: 0;
-  border-top: 1px dashed #a16bff;
-}
+/* 自研波段 K 线图 */
+.wave-panel { background: transparent; }
 
 .wave-chart {
   position: relative;
@@ -911,29 +559,6 @@ const activeHistoryFilter = ref('全部记录')
   inset: 0 48px 25px 0;
   width: calc(100% - 48px);
   height: calc(100% - 25px);
-}
-
-.wave-watermark {
-  position: absolute;
-  top: 37%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  color: rgba(132, 142, 156, .04);
-  font-size: 50px;
-  font-weight: 900;
-  letter-spacing: 9px;
-  pointer-events: none;
-}
-
-.wave-watermark-sub {
-  position: absolute;
-  top: calc(37% + 31px);
-  left: 50%;
-  transform: translateX(-50%);
-  color: rgba(132, 142, 156, .14);
-  font-size: 8px;
-  letter-spacing: 2px;
-  white-space: nowrap;
 }
 
 .wave-price-axis {
@@ -981,81 +606,29 @@ const activeHistoryFilter = ref('全部记录')
   border-bottom: 1px solid #a16bff;
 }
 
-.wave-footer .footer-note {
-  margin-left: auto;
-  color: var(--次要灰色文字, #848e9c);
-}
-
-/* 历史交易记录 */
+/* 实盘交易记录 */
 .history-panel { padding-bottom: 16px; }
-.history-heading { margin-bottom: 18px; }
 
-.history-status {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  color: #c5a968;
-  font-size: 9px;
-  white-space: nowrap;
+.history-heading {
+  margin-bottom: 18px;
 }
 
-.history-status i {
-  flex: 0 0 auto;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #c5a968;
+.history-heading h2 {
+  color: var(--主要文字颜色, #fff);
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .history-overview {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 18px;
   margin-bottom: 15px;
 }
 
 .history-description {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.history-description strong {
-  color: var(--主要文字颜色, #fff);
+  color: var(--次要灰色文字, #848e9c);
   font-size: 11px;
-}
-
-.history-description span {
-  color: var(--次要灰色文字, #848e9c);
-  font-size: 10px;
-}
-
-.history-filters {
-  display: flex;
-  gap: 5px;
-}
-
-.history-filters button {
-  padding: 7px 12px;
-  color: var(--次要灰色文字, #848e9c);
-  border: 1px solid var(--边框线条颜色, #222630);
-  border-radius: var(--小圆角, 6px);
-  background: transparent;
-  font-size: 10px;
-  cursor: pointer;
-  transition: color .2s, border-color .2s;
-}
-
-.history-filters button:hover {
-  color: var(--主要文字颜色, #fff);
-  border-color: var(--主色调蓝色, #315bff);
-}
-
-.history-filters button.active {
-  color: var(--主要文字颜色, #fff);
-  border-color: var(--主色调蓝色, #315bff);
-  background: transparent;
+  font-weight: 500;
 }
 
 .history-table-wrap {
@@ -1084,7 +657,7 @@ const activeHistoryFilter = ref('全部记录')
 }
 
 .history-table td { padding: 0; }
-.history-table tbody tr { height: 230px; }
+.history-table tbody tr { height: 200px; }
 
 .empty-history {
   display: flex;
@@ -1092,7 +665,7 @@ const activeHistoryFilter = ref('全部记录')
   flex-direction: column;
   justify-content: center;
   gap: 10px;
-  min-height: 230px;
+  min-height: 200px;
   padding: 28px 12px;
   text-align: center;
 }
@@ -1113,29 +686,8 @@ const activeHistoryFilter = ref('全部记录')
 }
 
 .empty-history strong {
-  color: var(--主要文字颜色, #fff);
+  color: var(--次要灰色文字, #848e9c);
   font-size: 12px;
-}
-
-.empty-history > span:not(.empty-history-icon) {
-  color: var(--次要灰色文字, #848e9c);
-  font-size: 10px;
-}
-
-.empty-history small {
-  margin-top: 4px;
-  color: var(--次要灰色文字, #848e9c);
-  font-size: 8px;
-  letter-spacing: 1.3px;
-}
-
-.history-table-footer {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding-top: 12px;
-  color: var(--次要灰色文字, #848e9c);
-  font-size: 9px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1146,41 +698,12 @@ const activeHistoryFilter = ref('全部记录')
   .live-page { padding-inline: 36px; }
 }
 
-@media (max-width: 1100px) {
-  .ai-main-row { gap: 15px; }
-  .direction-block { min-width: 120px; }
-  .ai-summary { min-width: 150px; }
-  .ticker-item { min-width: 220px; }
-  .section-panel { padding: 17px; }
-}
-
 @media (max-width: 850px) {
   .live-page { padding: 24px 14px 34px; }
-
-  .ai-main-row {
-    flex-wrap: wrap;
-    padding-block: 18px;
-  }
-
-  .ai-divider { display: none; }
-
-  .direction-block,
-  .ai-metric,
-  .ai-summary {
-    flex: 1 1 38%;
-    min-width: 130px;
-  }
-
+  .ai-main-row { gap: 16px; }
   .tradingview-container { height: 480px; }
   .wave-chart { height: 350px; }
-
-  .history-overview {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .history-filters { width: 100%; }
-  .history-filters button { flex: 1; }
+  .section-panel { padding: 17px; }
 }
 
 @media (max-width: 520px) {
@@ -1192,36 +715,11 @@ const activeHistoryFilter = ref('全部记录')
   }
 
   .ai-panel { padding: 16px 12px 12px; }
-
-  .ai-main-row { gap: 20px 12px; }
-
-  .direction-block,
-  .ai-metric,
-  .ai-summary {
-    flex-basis: 42%;
-  }
-
-  .direction-block strong { font-size: 21px; }
-  .ai-metric strong { font-size: 20px; }
+  .ai-main-row { gap: 12px; }
+  .direction-block strong,
+  .ai-metric strong { font-size: 18px; }
 
   .section-panel { padding: 14px 9px; }
-
-  .panel-title { gap: 8px; }
-  .panel-title h2 { font-size: 12px; }
-  .panel-title p { font-size: 7px; letter-spacing: .7px; }
-
-  .chart-meta { gap: 5px; }
-  .selected-symbol { font-size: 9px; }
-  .panel-badge { display: none; }
-
-  .tradingview-toolbar,
-  .wave-toolbar {
-    align-items: flex-start;
-    flex-direction: column;
-    justify-content: center;
-    gap: 9px;
-    padding-block: 10px;
-  }
 
   .tradingview-container {
     height: 430px;
@@ -1229,23 +727,5 @@ const activeHistoryFilter = ref('全部记录')
   }
 
   .wave-chart { height: 280px; }
-
-  .wave-legend {
-    justify-content: flex-start;
-    font-size: 8px;
-  }
-
-  .wave-footer { gap: 10px; }
-
-  .wave-footer .footer-note {
-    width: 100%;
-    margin-left: 0;
-  }
-
-  .history-overview { gap: 12px; }
-
-  .history-description span { line-height: 1.6; }
-
-  .history-table-footer { flex-direction: column; }
 }
 </style>
