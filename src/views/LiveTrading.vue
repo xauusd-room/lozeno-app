@@ -2,7 +2,16 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { createChart, CandlestickSeries, createSeriesMarkers } from 'lightweight-charts'
 
-const WS_URL = 'wss://lozeno-market.aaa375750526.workers.dev/ws'
+const LOCAL_WS_URL = 'ws://127.0.0.1:8001'
+const PUBLIC_WS_URL = 'wss://lozeno-market.aaa375750526.workers.dev/ws'
+
+function getWsUrl() {
+  const hostname = window.location.hostname
+
+  return ['localhost', '127.0.0.1'].includes(hostname)
+    ? LOCAL_WS_URL
+    : PUBLIC_WS_URL
+}
 const HISTORY_LIMIT = 300
 const RIGHT_SPACE_BARS = 12
 
@@ -188,7 +197,7 @@ function connectWebSocket() {
   clearTimeout(reconnectTimer)
 
   try {
-    socket = new WebSocket(WS_URL)
+    socket = new WebSocket(getWsUrl())
   } catch {
     wsError.value = '无法创建行情连接，请检查服务是否启动。'
     scheduleReconnect()
