@@ -42,7 +42,7 @@
         <div v-if="error" class="error">{{ error }}</div>
 
         <button class="pay-btn" :disabled="loading" @click="createOrder">
-          {{ loading ? '正在创建订单...' : '请立即支付' }}
+          {{ loading ? '正在创建订单...' : '立即支付' }}
         </button>
       </div>
 
@@ -238,9 +238,44 @@ let timer = null
 let noticeTimer = null
 
 const displayAmount = computed(() => {
+  // 已创建订单：严格使用后端返回的订单金额和币种
+  if (order.value) {
+    const amount = Number(
+      order.value.amount ?? order.value.payment?.amount
+    )
+
+    const currency =
+      order.value.currency ??
+      order.value.payment?.currency ??
+      'USD'
+
+    if (!Number.isFinite(amount)) {
+      return '金额获取失败'
+    }
+
+    if (currency === 'USDT') {
+      return `${amount.toFixed(2)} USDT`
+    }
+
+    if (currency === 'CNY') {
+      return `¥${amount.toFixed(2)}`
+    }
+
+    return `${currency} ${amount.toFixed(2)}`
+  }
+
+  // 创建订单前：根据用户选择的支付方式展示金额
   const price = Number(
     String(props.product.price).replace(/[^0-9.]/g, '')
   )
+
+  if (!Number.isFinite(price) || price <= 0) {
+    return '价格加载中'
+  }
+
+  if (method.value === 'usdt') {
+    return `${price.toFixed(2)} USDT`
+  }
 
   return `¥${(price * EXCHANGE_RATE).toFixed(2)}`
 })
@@ -385,7 +420,10 @@ async function createOrder() {
       })
     })
 
-    const createdOrder = data.order || data
+    const createdOrder = {
+  ...(data.order || data),
+  payment: data.payment || null
+}
 
     if (!createdOrder.order_no) {
       throw new Error('服务器未返回有效订单号，请稍后重试')

@@ -1,130 +1,244 @@
 <script setup>
-import { computed, ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { createChart, CandlestickSeries, createSeriesMarkers } from 'lightweight-charts'
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
-const CANDLE_URL = `${API_BASE}/api/market/candles`
-const TICK_URL = `${API_BASE}/api/market/tick`
-const TRADES_URL = `${API_BASE}/api/trades`
+const WS_URL = 'ws://127.0.0.1:8001'
+const HISTORY_LIMIT = 300
+const RIGHT_SPACE_BARS = 12
 
-const instruments = [
-  { id: 'BTCUSD', name: 'BTC', fullName: 'Bitcoin', price: '--', change: '--', up: true, color: '#f4b860' },
-  { id: 'ETHUSD', name: 'ETH', fullName: 'Ethereum', price: '--', change: '--', up: true, color: '#9b9fff' },
-  { id: 'XAUUSD', name: 'GOLD', fullName: '黄金现货', price: '--', change: '--', up: true, color: '#f3c66b' },
-  { id: 'USOIL', name: 'WTI', fullName: 'WTI 原油', price: '--', change: '--', up: true, color: '#65d9c0' },
-  { id: 'XAGUSD', name: 'SILVER', fullName: '白银现货', price: '--', change: '--', up: true, color: '#b4c5dc' },
-  { id: 'SOLUSD', name: 'SOL', fullName: 'Solana', price: '--', change: '--', up: true, color: '#a98aff' }
+const eaBots = [
+  { id: 1, name: 'TrendMaster Pro', pnl: '+$342.50', returnStr: '+793.1k · 近30天', active: false },
+  { id: 2, name: 'GridScalper X', pnl: '+$189.00', returnStr: '+599.7k · 近30天', active: false },
+  { id: 3, name: 'NeuralArbitrage', pnl: '+$1,245.80', returnStr: '+532.2k · 近30天', active: true },
+  { id: 4, name: 'MartinMaster', pnl: '-$42.10', returnStr: '+500.1k · 近30天', active: false },
+  { id: 5, name: 'MomentumHunter', pnl: '+$88.30', returnStr: '+497.9k · 近30天', active: false },
+  { id: 6, name: 'BreakoutRetest Pro', pnl: '+$512.00', returnStr: '+492.3k · 近30天', active: false },
+  { id: 7, name: 'ReversalMaster', pnl: '+$94.20', returnStr: '+458.4k · 近30天', active: false },
+  { id: 8, name: 'SmartMoney X', pnl: '+$126.70', returnStr: '+421.6k · 近30天', active: false }
 ]
 
-const selectedInstrument = ref('XAUUSD')
-const dataSymbol = computed(() =>
-  selectedInstrument.value === 'XAUUSD' ? 'XAUUSD.cn' : selectedInstrument.value
-)
+const copyLogs = [
+  { type: 'exit', label: '平仓', text: '交易机器人卖出黄金 · 已同步平仓' },
+  { type: 'sync', label: '同步', text: '8 个机器人已同步 · 延迟 283 毫秒' },
+  { type: 'fill', label: '成交', text: '卖出黄金 · -$6.13' },
+  { type: 'track', label: '追踪', text: 'MomentumHunter 买入黄金 · 策略信号已触发' },
+  { type: 'copy', label: '跟单', text: '跟随 SmartMoney X · 买入黄金' },
+  { type: 'fill', label: '成交', text: '卖出黄金 · -$1.38' }
+]
 
-const candles = ref([])
-const trades = ref([])
-const latestTick = ref(null)
-const loading = ref(true)
-const dataError = ref('')
+const tradingRecords = [
+  { id: 1, time: '2026-10-21 19:35:12', bot: 'BreakoutRetest Pro', symbol: 'XAUUSD.cn', side: 'BUY', open: '4,321.50', close: '4,324.10', lot: '0.01', pnl: '+2.60', status: '已平仓' },
+  { id: 2, time: '2026-10-21 19:20:45', bot: 'MomentumHunter', symbol: 'XAUUSD.cn', side: 'SELL', open: '4,325.20', close: '4,326.40', lot: '0.01', pnl: '-1.20', status: '已平仓' },
+  { id: 3, time: '2026-10-21 19:05:31', bot: 'TrendMaster Pro', symbol: 'XAUUSD.cn', side: 'BUY', open: '4,318.70', close: '4,321.00', lot: '0.02', pnl: '+4.60', status: '已平仓' },
+  { id: 4, time: '2026-10-21 18:52:08', bot: 'SmartMoney X', symbol: 'XAUUSD.cn', side: 'BUY', open: '4,316.20', close: '--', lot: '0.01', pnl: '--', status: '持仓中' },
+  { id: 5, time: '2026-10-21 18:40:16', bot: 'GridScalper X', symbol: 'XAUUSD.cn', side: 'SELL', open: '4,322.80', close: '4,324.00', lot: '0.01', pnl: '-1.20', status: '已平仓' },
+  { id: 6, time: '2026-10-21 18:22:51', bot: 'ReversalMaster', symbol: 'XAUUSD.cn', side: 'BUY', open: '4,310.40', close: '4,313.90', lot: '0.01', pnl: '+3.50', status: '已平仓' }
+]
+
 const chartHost = ref(null)
+const wsError = ref('')
 
 let chart = null
 let candleSeries = null
 let markerSeries = null
+let socket = null
+let reconnectTimer = null
 let resizeObserver = null
-let candleTimer = null
-let tickTimer = null
-let tradeTimer = null
-let requestVersion = 0
-let destroyed = false
+let manuallyClosed = false
+let reconnectDelay = 2000
+let candleData = []
 
-function selectInstrument(item) {
-  if (selectedInstrument.value !== item.id) selectedInstrument.value = item.id
-}
+function normalizeCandle(raw) {
+  if (!raw) return null
 
-function toUnixTime(value) {
-  if (typeof value === 'number') {
-    return Math.floor(value > 1e12 ? value / 1000 : value)
-  }
-  if (typeof value === 'string') {
-    const numeric = Number(value)
-    if (Number.isFinite(numeric) && value.trim() !== '') {
-      return Math.floor(numeric > 1e12 ? numeric / 1000 : numeric)
-    }
-    const parsed = Date.parse(value)
-    if (Number.isFinite(parsed)) return Math.floor(parsed / 1000)
-  }
-  return null
-}
-
-function normalizeCandle(item) {
-  const time = toUnixTime(item.time ?? item.timestamp ?? item.datetime)
-  const open = Number(item.open)
-  const high = Number(item.high)
-  const low = Number(item.low)
-  const close = Number(item.close)
-
-  if (time === null || ![open, high, low, close].every(Number.isFinite) || high < low) {
-    return null
+  const candle = {
+    time: Number(raw.time),
+    open: Number(raw.open),
+    high: Number(raw.high),
+    low: Number(raw.low),
+    close: Number(raw.close)
   }
 
-  return { time, open, high, low, close }
+  return Object.values(candle).every(Number.isFinite) ? candle : null
 }
 
-function responseRows(payload) {
-  if (Array.isArray(payload)) return payload
-  if (Array.isArray(payload?.data)) return payload.data
-  if (Array.isArray(payload?.candles)) return payload.candles
-  if (Array.isArray(payload?.trades)) return payload.trades
-  return []
-}
+function keepLatestWindow() {
+  if (!chart || !candleData.length) return
 
-async function fetchJson(url) {
-  const response = await fetch(url, {
-    cache: 'no-store',
-    headers: { Accept: 'application/json' }
+  chart.timeScale().setVisibleLogicalRange({
+    from: Math.max(0, candleData.length - HISTORY_LIMIT),
+    to: candleData.length - 1 + RIGHT_SPACE_BARS
   })
-  if (!response.ok) throw new Error(`HTTP ${response.status}`)
-  return response.json()
+}
+
+function loadCandles(rawCandles) {
+  if (!candleSeries || !Array.isArray(rawCandles)) return
+
+  const sorted = rawCandles
+    .map(normalizeCandle)
+    .filter(Boolean)
+    .sort((a, b) => a.time - b.time)
+
+  const unique = []
+
+  for (const candle of sorted) {
+    if (unique.length && unique[unique.length - 1].time === candle.time) {
+      unique[unique.length - 1] = candle
+    } else {
+      unique.push(candle)
+    }
+  }
+
+  candleData = unique.slice(-HISTORY_LIMIT)
+  candleSeries.setData(candleData)
+  keepLatestWindow()
+}
+
+function updateCandle(raw) {
+  const candle = normalizeCandle(raw)
+  if (!candle || !candleSeries) return
+
+  try {
+    const lastIndex = candleData.length - 1
+    const last = candleData[lastIndex]
+
+    if (!last) {
+      candleData = [candle]
+      candleSeries.setData(candleData)
+    } else if (candle.time === last.time) {
+      candleData[lastIndex] = candle
+      candleSeries.update(candle)
+    } else if (candle.time > last.time) {
+      candleData.push(candle)
+
+      if (candleData.length > HISTORY_LIMIT) {
+        candleData = candleData.slice(-HISTORY_LIMIT)
+        candleSeries.setData(candleData)
+      } else {
+        candleSeries.update(candle)
+      }
+
+      keepLatestWindow()
+    }
+  } catch (error) {
+    console.warn('行情蜡烛图更新失败：', error)
+  }
+}
+
+function updateTradeMarkers(markers = []) {
+  if (!markerSeries) return
+
+  try {
+    markerSeries.setMarkers(markers.map(({ text, ...marker }) => marker))
+  } catch (error) {
+    console.warn('交易标记更新失败：', error)
+  }
+}
+
+function handleMessage(event) {
+  let message
+
+  try {
+    message = JSON.parse(event.data)
+  } catch {
+    return
+  }
+
+  switch (message.type) {
+    case 'snapshot':
+      loadCandles(message.candles)
+      wsError.value = ''
+      break
+
+    case 'tick':
+      // 接收实时行情消息；当前页面不单独显示买卖报价。
+      break
+
+    case 'candle_update':
+      updateCandle(message.candle)
+      break
+
+    case 'trade_markers':
+      updateTradeMarkers(message.markers || [])
+      break
+  }
+}
+
+function scheduleReconnect() {
+  if (manuallyClosed) return
+
+  clearTimeout(reconnectTimer)
+  reconnectTimer = setTimeout(connectWebSocket, reconnectDelay)
+  reconnectDelay = Math.min(reconnectDelay * 1.5, 10000)
+}
+
+function connectWebSocket() {
+  if (manuallyClosed) return
+
+  clearTimeout(reconnectTimer)
+
+  try {
+    socket = new WebSocket(WS_URL)
+  } catch {
+    wsError.value = '无法创建行情连接，请检查服务是否启动。'
+    scheduleReconnect()
+    return
+  }
+
+  socket.onopen = () => {
+    wsError.value = ''
+    reconnectDelay = 2000
+  }
+
+  socket.onmessage = handleMessage
+
+  socket.onerror = () => {
+    wsError.value = '无法连接行情服务，请检查服务是否启动。'
+  }
+
+  socket.onclose = scheduleReconnect
 }
 
 function initChart() {
-  if (!chartHost.value || chart || destroyed) return
+  if (!chartHost.value) return
 
   chart = createChart(chartHost.value, {
-    width: chartHost.value.clientWidth || 800,
-    height: chartHost.value.clientHeight || 500,
-    layout: {
-      background: { color: '#141722' },
-      textColor: '#848e9c',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif',
-      fontSize: 11
-    },
-    grid: {
-      vertLines: { color: 'rgba(132,142,156,0.10)' },
-      horzLines: { color: 'rgba(132,142,156,0.10)' }
-    },
-    rightPriceScale: {
-      borderVisible: false,
-      scaleMargins: { top: 0.08, bottom: 0.08 }
-    },
-    timeScale: {
-      borderVisible: false,
-      timeVisible: true,
-      secondsVisible: false,
-      rightOffset: 2,
-      barSpacing: 8,
-      fixLeftEdge: true,
-      fixRightEdge: true
-    },
-    crosshair: {
-      vertLine: { visible: false, labelVisible: false },
-      horzLine: { visible: false, labelVisible: false }
-    },
+    width: chartHost.value.clientWidth,
+    height: chartHost.value.clientHeight,
     handleScroll: false,
     handleScale: false,
-    kineticScroll: { mouse: false, touch: false },
-    watermark: { visible: false }
+    layout: {
+      background: { color: '#0b0d12' },
+      textColor: '#848e9c',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: 12,
+      attributionLogo: false
+    },
+    grid: {
+      vertLines: { color: '#222630' },
+      horzLines: { color: '#222630' }
+    },
+    rightPriceScale: {
+      visible: true,
+      autoScale: true,
+      borderColor: '#222630',
+      scaleMargins: { top: 0.12, bottom: 0.12 }
+    },
+    timeScale: {
+      borderColor: '#222630',
+      timeVisible: true,
+      secondsVisible: false,
+      rightOffset: RIGHT_SPACE_BARS,
+      barSpacing: 5,
+      minBarSpacing: 2,
+      lockVisibleTimeRangeOnResize: true,
+      rightBarStaysOnScroll: true
+    },
+    crosshair: {
+      vertLine: { color: '#687386', labelBackgroundColor: '#315bff' },
+      horzLine: { color: '#687386', labelBackgroundColor: '#315bff' }
+    },
+    localization: { locale: 'zh-CN' }
   })
 
   candleSeries = chart.addSeries(CandlestickSeries, {
@@ -134,261 +248,47 @@ function initChart() {
     borderDownColor: '#f6465d',
     wickUpColor: '#0ecb81',
     wickDownColor: '#f6465d',
-    priceLineVisible: false,
+    priceLineVisible: true,
     lastValueVisible: true
   })
 
   markerSeries = createSeriesMarkers(candleSeries, [])
 
-  resizeObserver = new ResizeObserver(entries => {
-    if (!chart || !entries.length) return
-    const { width, height } = entries[0].contentRect
+  resizeObserver = new ResizeObserver(([entry]) => {
+    if (!entry || !chart) return
+
     chart.applyOptions({
-      width: Math.max(1, Math.floor(width)),
-      height: Math.max(1, Math.floor(height))
+      width: Math.floor(entry.contentRect.width),
+      height: Math.max(280, Math.floor(entry.contentRect.height))
     })
+
+    keepLatestWindow()
   })
 
   resizeObserver.observe(chartHost.value)
 }
 
-function tradeTime(trade, type) {
-  const value = type === 'open'
-    ? trade.open_time ?? trade.opened_at ?? trade.entry_time
-    : trade.close_time ?? trade.closed_at ?? trade.exit_time
-
-  return toUnixTime(value)
-}
-
-function tradeDirection(trade) {
-  const value = String(trade.direction ?? trade.type ?? trade.side ?? '').toLowerCase()
-  return ['buy', 'long', '多', '多单', '0'].includes(value) ? 'buy' : 'sell'
-}
-
-function buildMarkers() {
-  const result = []
-
-  for (const trade of trades.value) {
-    const direction = tradeDirection(trade)
-    const openTime = tradeTime(trade, 'open')
-    const closeTime = tradeTime(trade, 'close')
-    const openPrice = Number(trade.open_price ?? trade.entry_price)
-    const closePrice = Number(trade.close_price ?? trade.exit_price)
-
-    if (openTime !== null && Number.isFinite(openPrice)) {
-      result.push({
-        time: openTime,
-        position: direction === 'buy' ? 'belowBar' : 'aboveBar',
-        color: direction === 'buy' ? '#0ecb81' : '#f6465d',
-        shape: direction === 'buy' ? 'arrowUp' : 'arrowDown',
-        text: `${direction === 'buy' ? '买入' : '卖出'} ${openPrice}`
-      })
-    }
-
-    if (closeTime !== null && Number.isFinite(closePrice)) {
-      result.push({
-        time: closeTime,
-        position: direction === 'buy' ? 'aboveBar' : 'belowBar',
-        color: '#315bff',
-        shape: 'circle',
-        text: `平仓 ${closePrice}`
-      })
-    }
-  }
-
-  result.sort((a, b) => a.time - b.time)
-  markerSeries?.setMarkers(result)
-}
-
-function updateDisplayedPrice(price) {
-  if (!Number.isFinite(price)) return
-
-  const item = instruments.find(row => row.id === selectedInstrument.value)
-  if (!item) return
-
-  const previous = Number(item.price.replace(/,/g, ''))
-  item.price = price.toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  })
-
-  if (Number.isFinite(previous) && previous > 0) {
-    const change = ((price - previous) / previous) * 100
-    item.change = `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`
-    item.up = change >= 0
-  }
-}
-
-async function loadCandles() {
-  const version = requestVersion
-
-  try {
-    const payload = await fetchJson(
-      `${CANDLE_URL}?symbol=${encodeURIComponent(dataSymbol.value)}&timeframe=M5`
-    )
-    if (destroyed || version !== requestVersion) return
-
-    const rows = responseRows(payload)
-      .map(normalizeCandle)
-      .filter(Boolean)
-      .sort((a, b) => a.time - b.time)
-
-    const unique = new Map(rows.map(row => [row.time, row]))
-    candles.value = [...unique.values()]
-
-    if (candleSeries && candles.value.length) {
-      candleSeries.setData(candles.value)
-      chart?.timeScale().fitContent()
-    }
-
-    dataError.value = candles.value.length ? '' : '暂无行情数据'
-  } catch {
-    if (version === requestVersion) dataError.value = '行情接口暂不可用'
-  } finally {
-    if (version === requestVersion) loading.value = false
-  }
-}
-
-async function loadTick() {
-  const version = requestVersion
-
-  try {
-    const payload = await fetchJson(
-      `${TICK_URL}?symbol=${encodeURIComponent(dataSymbol.value)}`
-    )
-    if (destroyed || version !== requestVersion) return
-
-    const tick = payload?.data ?? payload
-    const price = Number(tick.price ?? tick.last ?? tick.bid)
-    const time = toUnixTime(tick.time ?? tick.timestamp ?? tick.datetime)
-
-    if (!Number.isFinite(price) || time === null) return
-
-    latestTick.value = { price, time }
-    updateDisplayedPrice(price)
-
-    const currentBarTime = Math.floor(time / 300) * 300
-    const current = candles.value[candles.value.length - 1]
-    if (!current) return
-
-    if (currentBarTime === current.time) {
-      const updated = {
-        ...current,
-        high: Math.max(current.high, price),
-        low: Math.min(current.low, price),
-        close: price
-      }
-      candles.value[candles.value.length - 1] = updated
-      candleSeries?.update(updated)
-    } else if (currentBarTime > current.time) {
-      const updated = {
-        time: currentBarTime,
-        open: current.close,
-        high: Math.max(current.close, price),
-        low: Math.min(current.close, price),
-        close: price
-      }
-      candles.value.push(updated)
-      candleSeries?.update(updated)
-    }
-  } catch {
-    // 保留最后一次有效行情，不生成模拟价格。
-  }
-}
-
-async function loadTrades() {
-  const version = requestVersion
-
-  try {
-    const payload = await fetchJson(
-      `${TRADES_URL}?symbol=${encodeURIComponent(dataSymbol.value)}`
-    )
-    if (destroyed || version !== requestVersion) return
-
-    trades.value = responseRows(payload)
-    buildMarkers()
-  } catch {
-    // 接口不可用时不伪造交易记录。
-  }
-}
-
-function stopPolling() {
-  if (candleTimer) window.clearInterval(candleTimer)
-  if (tickTimer) window.clearInterval(tickTimer)
-  if (tradeTimer) window.clearInterval(tradeTimer)
-  candleTimer = tickTimer = tradeTimer = null
-}
-
-function startPolling() {
-  stopPolling()
-  requestVersion++
-  loading.value = true
-  dataError.value = ''
-  candles.value = []
-  trades.value = []
-  latestTick.value = null
-  candleSeries?.setData([])
-  markerSeries?.setMarkers([])
-
-  loadCandles()
-  loadTick()
-  loadTrades()
-
-  candleTimer = window.setInterval(loadCandles, 5000)
-  tickTimer = window.setInterval(loadTick, 200)
-  tradeTimer = window.setInterval(loadTrades, 5000)
-}
-
-const completedTrades = computed(() =>
-  trades.value.filter(trade => tradeTime(trade, 'close') !== null)
-)
-
-function formatTime(value) {
-  const timestamp = toUnixTime(value)
-  if (timestamp === null) return '--'
-
-  return new Date(timestamp * 1000).toLocaleString('zh-CN', {
-    hour12: false
-  })
-}
-
-function formatNumber(value, digits = 2) {
-  const number = Number(value)
-  return Number.isFinite(number) ? number.toFixed(digits) : '--'
-}
-
-function tradeDuration(trade) {
-  const open = tradeTime(trade, 'open')
-  const close = tradeTime(trade, 'close')
-  if (open === null || close === null) return '--'
-
-  const minutes = Math.max(0, Math.floor((close - open) / 60))
-  if (minutes < 60) return `${minutes} 分钟`
-
-  const hours = Math.floor(minutes / 60)
-  const rest = minutes % 60
-
-  if (hours < 24) return `${hours} 小时 ${rest} 分钟`
-  return `${Math.floor(hours / 24)} 天 ${hours % 24} 小时`
-}
-
-watch(selectedInstrument, async () => {
-  await nextTick()
-  startPolling()
-})
-
-onMounted(async () => {
-  await nextTick()
+onMounted(() => {
   initChart()
-  startPolling()
+  connectWebSocket()
 })
 
 onBeforeUnmount(() => {
-  destroyed = true
-  stopPolling()
-  requestVersion++
+  manuallyClosed = true
+  clearTimeout(reconnectTimer)
+
+  if (socket) {
+    socket.onopen = null
+    socket.onmessage = null
+    socket.onerror = null
+    socket.onclose = null
+    socket.close()
+  }
+
   resizeObserver?.disconnect()
   chart?.remove()
+
+  candleData = []
   chart = null
   candleSeries = null
   markerSeries = null
@@ -396,435 +296,837 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <main class="live-page">
-    <div class="ambient ambient-blue"></div>
-    <div class="ambient ambient-purple"></div>
+  <main class="grok-live-page">
+    <div class="main-layout-grid">
+      <section class="panel chart-panel">
+        <div class="mt5-chart-container">
+          <div class="symbol-badge">XAUUSD</div>
+          <div ref="chartHost" class="mt5-chart-canvas"></div>
+          <div v-if="wsError" class="chart-error">{{ wsError }}</div>
+        </div>
+      </section>
 
-    <section class="terminal-frame">
-      <section class="ticker-section">
-        <div class="ticker-viewport">
-          <div class="ticker-track">
-            <button
-              v-for="(item, index) in [...instruments, ...instruments]"
-              :key="`${item.id}-${index}`"
-              type="button"
-              class="ticker-item"
-              :class="{
-                selected: selectedInstrument === item.id,
-                'ticker-up': item.up,
-                'ticker-down': !item.up
-              }"
-              @click="selectInstrument(item)"
-            >
-              <span class="ticker-symbol-icon" :style="{ color: item.color }">
-                {{ item.name === 'GOLD' ? 'Au' : item.name.slice(0, 1) }}
-              </span>
+      <div class="right-top-group">
+        <section class="metrics-grid">
+          <article class="panel metric-card">
+            <span class="panel-label">账户余额</span>
+            <div class="panel-main-val">$74.40</div>
+            <div class="panel-sub-text">初始余额 $77.00</div>
+          </article>
 
-              <span class="ticker-info">
-                <span class="ticker-name">{{ item.name }}</span>
-                <span class="ticker-full-name">{{ item.fullName }}</span>
-              </span>
+          <article class="panel metric-card">
+            <span class="panel-label">总盈亏</span>
+            <div class="panel-main-val negative">-$2.60</div>
+            <div class="panel-sub-text negative">总体收益 -3.5%</div>
+          </article>
 
-              <span class="ticker-quote">
-                <strong>{{ item.price }}</strong>
-                <small>{{ item.change }}</small>
-              </span>
+          <article class="panel metric-card">
+            <span class="panel-label">最大回撤</span>
+            <div class="panel-main-val negative">-10.7%</div>
+            <div class="panel-sub-text">当前回撤 -3.3% · 峰值 $77</div>
+          </article>
 
-              <span class="ticker-arrow">{{ item.up ? '↗' : '↘' }}</span>
-            </button>
+          <article class="panel metric-card">
+            <span class="panel-label">胜率</span>
+            <div class="winrate-content">
+              <div class="winrate-circle"><span>36%</span></div>
+              <div class="winrate-badge-text">
+                <span class="win">4 次盈利</span> / <span class="loss">7 次亏损</span>
+              </div>
+            </div>
+          </article>
+
+          <article class="panel metric-card">
+            <span class="panel-label">总交易次数</span>
+            <div class="panel-main-val">11</div>
+            <div class="panel-sub-text">盈利 4 次 · 亏损 7 次</div>
+          </article>
+
+          <article class="panel metric-card">
+            <span class="panel-label">盈利因子</span>
+            <div class="panel-main-val">1.28</div>
+            <div class="panel-sub-text">总盈利与总亏损之比</div>
+          </article>
+
+          <article class="panel metric-card">
+            <span class="panel-label">平均每笔盈亏</span>
+            <div class="panel-main-val">$0.24</div>
+            <div class="panel-sub-text">每笔交易</div>
+          </article>
+
+          <article class="panel metric-card">
+            <span class="panel-label">已加载 EA 数量</span>
+            <div class="panel-main-val">{{ eaBots.length }}</div>
+            <div class="panel-sub-text">个策略已加载</div>
+          </article>
+        </section>
+
+        <section class="panel history-panel">
+          <div class="panel-heading">
+            <span class="panel-label">余额历史</span>
+            <span class="history-tag">48 小时</span>
+          </div>
+
+          <div class="history-chart">
+            <svg viewBox="0 0 600 150" preserveAspectRatio="none" role="img" aria-label="账户余额变化曲线">
+              <defs>
+                <linearGradient id="historyFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#0ecb81" stop-opacity=".2" />
+                  <stop offset="100%" stop-color="#0ecb81" stop-opacity="0" />
+                </linearGradient>
+              </defs>
+
+              <line x1="0" y1="50" x2="600" y2="50" stroke="#222630" stroke-dasharray="4 5" />
+              <line x1="0" y1="100" x2="600" y2="100" stroke="#222630" stroke-dasharray="4 5" />
+
+              <path
+                d="M0 35 C35 25 48 62 82 54 S130 32 165 61 S218 83 250 65 S300 80 340 57 S390 72 430 88 S490 65 525 93 S570 100 600 112 L600 150 L0 150 Z"
+                fill="url(#historyFill)"
+              />
+
+              <path
+                d="M0 35 C35 25 48 62 82 54 S130 32 165 61 S218 83 250 65 S300 80 340 57 S390 72 430 88 S490 65 525 93 S570 100 600 112"
+                fill="none"
+                stroke="#0ecb81"
+                stroke-width="2"
+                vector-effect="non-scaling-stroke"
+              />
+            </svg>
+          </div>
+
+          <div class="history-axis">
+            <span>48 小时前</span>
+            <span>24 小时前</span>
+            <span>现在</span>
+          </div>
+        </section>
+      </div>
+
+      <section class="panel ea-bots-panel">
+        <div class="ea-panel-header">
+          <span class="panel-label">EA 机器人列表</span>
+          <span class="ea-target-info">共 {{ eaBots.length }} 个机器人</span>
+        </div>
+
+        <div class="ea-track-grid">
+          <article
+            v-for="(bot, index) in eaBots"
+            :key="bot.id"
+            class="ea-card"
+            :class="{ active: bot.active }"
+          >
+            <div class="ea-card-header">
+              <div class="ea-avatar-letter" :class="`avatar-${index + 1}`">
+                {{ bot.name.slice(0, 1) }}
+              </div>
+              <span class="ea-num">第 {{ index + 1 }} 名</span>
+            </div>
+
+            <div class="ea-name">{{ bot.name }}</div>
+            <div class="ea-return">{{ bot.returnStr }}</div>
+
+            <div class="ea-pnl">
+              盈亏
+              <span :class="{ negative: bot.pnl.startsWith('-') }">{{ bot.pnl }}</span>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel copy-log-panel">
+        <div class="panel-heading">
+          <span class="panel-label">实时跟单日志</span>
+          <span class="live-indicator"><i /> 实时</span>
+        </div>
+
+        <div class="copy-log-list">
+          <div v-for="(log, index) in copyLogs" :key="index" class="log-item">
+            <span class="log-badge" :class="log.type">[{{ log.label }}]</span>
+            <span class="log-content">{{ log.text }}</span>
           </div>
         </div>
       </section>
+    </div>
 
-      <section class="section-panel chart-panel">
-        <div class="chart-status">
-          <span class="status-dot" :class="{ 'status-live': latestTick }"></span>
-          <span>{{ loading ? '正在读取行情' : dataError || (latestTick ? '实时行情' : '等待行情') }}</span>
-          <span class="chart-symbol">{{ dataSymbol }} · M5</span>
-          <span class="chart-count">{{ candles.length }} 根 K 线</span>
+    <section class="panel trading-records-panel">
+      <div class="records-heading">
+        <div>
+          <span class="panel-label">实盘交易记录</span>
+          <p class="records-subtitle">实时交易历史</p>
         </div>
+        <span class="records-count">共 {{ tradingRecords.length }} 条记录</span>
+      </div>
 
-        <div ref="chartHost" class="chart-host"></div>
-      </section>
+      <div class="records-table-wrap">
+        <table class="records-table">
+          <thead>
+            <tr>
+              <th>交易时间</th>
+              <th>机器人</th>
+              <th>交易品种</th>
+              <th>方向</th>
+              <th>开仓价</th>
+              <th>平仓价</th>
+              <th>手数</th>
+              <th>盈亏</th>
+              <th>状态</th>
+            </tr>
+          </thead>
 
-      <section class="section-panel history-panel">
-        <div class="history-heading">
-          <h2>实盘交易记录</h2>
-        </div>
-
-        <div class="history-overview">
-          <strong class="history-description">真实成交记录</strong>
-        </div>
-
-        <div class="history-table-wrap">
-          <table class="history-table">
-            <thead>
-              <tr>
-                <th>开仓时间</th>
-                <th>平仓时间</th>
-                <th>交易品种</th>
-                <th>方向</th>
-                <th>手数</th>
-                <th>开仓价格</th>
-                <th>平仓价格</th>
-                <th>盈亏 (USD)</th>
-                <th>持仓时长</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              <tr
-                v-for="(trade, index) in [...completedTrades].reverse()"
-                :key="trade.ticket ?? trade.order ?? index"
+          <tbody>
+            <tr v-for="record in tradingRecords" :key="record.id">
+              <td class="record-time">{{ record.time }}</td>
+              <td class="record-bot">{{ record.bot }}</td>
+              <td>{{ record.symbol === 'XAUUSD.cn' ? '黄金' : record.symbol }}</td>
+              <td>
+                <span class="side-tag" :class="record.side.toLowerCase()">
+                  {{ record.side === 'BUY' ? '买入' : '卖出' }}
+                </span>
+              </td>
+              <td>{{ record.open }}</td>
+              <td>{{ record.close }}</td>
+              <td>{{ record.lot }}</td>
+              <td
+                class="record-pnl"
+                :class="{
+                  positive: record.pnl.startsWith('+'),
+                  negative: record.pnl.startsWith('-')
+                }"
               >
-                <td>{{ formatTime(trade.open_time ?? trade.opened_at ?? trade.entry_time) }}</td>
-                <td>{{ formatTime(trade.close_time ?? trade.closed_at ?? trade.exit_time) }}</td>
-                <td>{{ trade.symbol ?? dataSymbol }}</td>
-                <td :class="tradeDirection(trade) === 'buy' ? 'profit-text' : 'loss-text'">
-                  {{ tradeDirection(trade) === 'buy' ? '多单' : '空单' }}
-                </td>
-                <td>{{ formatNumber(trade.volume ?? trade.lot, 2) }}</td>
-                <td>{{ formatNumber(trade.open_price ?? trade.entry_price) }}</td>
-                <td>{{ formatNumber(trade.close_price ?? trade.exit_price) }}</td>
-                <td :class="Number(trade.profit ?? trade.pnl) >= 0 ? 'profit-text' : 'loss-text'">
-                  {{ formatNumber(trade.profit ?? trade.pnl) }}
-                </td>
-                <td>{{ tradeDuration(trade) }}</td>
-              </tr>
-
-              <tr v-if="completedTrades.length === 0">
-                <td colspan="9">
-                  <div class="empty-history">
-                    <span class="empty-history-icon">
-                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                        <rect x="4" y="3.5" width="16" height="17" rx="2" stroke="currentColor" stroke-width="1.4" />
-                        <path d="M8 8h8M8 12h8M8 16h5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
-                      </svg>
-                    </span>
-                    <strong>{{ loading ? '正在读取交易记录' : '暂无交易记录' }}</strong>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
+                {{ record.pnl }}
+              </td>
+              <td>
+                <span class="status-tag" :class="{ running: record.status === '持仓中' }">
+                  {{ record.status }}
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </section>
   </main>
 </template>
 
 <style scoped>
-.live-page {
-  --line: var(--边框线条颜色, #222630);
-  position: relative;
-  isolation: isolate;
-  min-height: calc(100vh - 74px);
-  overflow: hidden;
-  padding: 30px 24px 46px;
-  color: var(--主要文字颜色, #fff);
-  background: var(--主页面背景色, #0b0d12);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+.grok-live-page,
+.grok-live-page * {
+  box-sizing: border-box;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
-.live-page::before {
-  position: absolute;
-  z-index: -1;
-  inset: 0;
-  content: "";
-  pointer-events: none;
-  opacity: .12;
-  background-image:
-    linear-gradient(rgba(55, 98, 180, .05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(55, 98, 180, .05) 1px, transparent 1px);
-  background-size: 34px 34px;
-  mask-image: linear-gradient(to bottom, #000, transparent 82%);
+.grok-live-page *::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
-.ambient {
-  position: absolute;
-  z-index: -1;
-  width: 380px;
-  height: 380px;
-  border-radius: 50%;
-  filter: blur(100px);
-  pointer-events: none;
-  opacity: .06;
+:global(html),
+:global(body) {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
-.ambient-blue { top: 200px; left: -250px; background: #126bff; }
-.ambient-purple { top: 780px; right: -260px; background: #9c3dff; }
+:global(html::-webkit-scrollbar),
+:global(body::-webkit-scrollbar) {
+  display: none;
+  width: 0;
+  height: 0;
+}
 
-.terminal-frame {
-  position: relative;
+.grok-live-page {
+  --panel-bg: var(--表面卡片背景色, #141722);
+  --panel-border: var(--边框线条颜色, #222630);
+  --text-main: var(--主要文字颜色, #fff);
+  --text-sub: var(--次要灰色文字, #848e9c);
+  --positive: var(--涨势绿色, #0ecb81);
+  --negative: var(--跌势红色, #f6465d);
+  --chart-height: clamp(420px, 55vh, 640px);
+
   width: 100%;
   max-width: var(--页面最大宽度, 1320px);
-  margin-inline: auto;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-.ticker-section,
-.ticker-viewport {
-  padding: 0;
-  margin: 0;
-  overflow: hidden;
-  border: 0;
-  background: transparent;
-}
-
-.ticker-track {
-  display: flex;
-  width: max-content;
-  animation: ticker-scroll 38s linear infinite;
-}
-
-.ticker-viewport:hover .ticker-track {
-  animation-play-state: paused;
-}
-
-.ticker-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 245px;
-  padding: 15px 18px;
-  color: var(--主要文字颜色, #fff);
-  text-align: left;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  box-shadow: none;
-  cursor: pointer;
-}
-
-.ticker-item:hover,
-.ticker-item.selected {
-  border: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-.ticker-symbol-icon {
-  display: grid;
-  flex: 0 0 auto;
-  width: 34px;
-  height: 34px;
-  place-items: center;
-  border: 1px solid currentColor;
-  border-radius: 50%;
-  background: transparent;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.ticker-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 64px;
-}
-
-.ticker-name {
-  color: var(--主要文字颜色, #fff);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: .5px;
-}
-
-.ticker-full-name {
-  color: var(--次要灰色文字, #848e9c);
-  font-size: 9px;
-}
-
-.ticker-quote {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-left: auto;
-  text-align: right;
-}
-
-.ticker-quote strong {
-  color: var(--主要文字颜色, #fff);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-}
-
-.ticker-quote small { font-size: 10px; }
-
-.ticker-up .ticker-quote small,
-.ticker-up .ticker-arrow {
-  color: var(--涨势绿色, #0ecb81);
-}
-
-.ticker-down .ticker-quote small,
-.ticker-down .ticker-arrow {
-  color: var(--跌势红色, #f6465d);
-}
-
-.ticker-arrow {
-  align-self: flex-start;
-  font-size: 14px;
-}
-
-@keyframes ticker-scroll {
-  from { transform: translateX(0); }
-  to { transform: translateX(-50%); }
-}
-
-.section-panel {
   min-width: 0;
-  padding: 20px;
-  border: 0;
-  background: transparent;
+  min-height: 100vh;
+  margin-inline: auto;
+  padding: 16px;
+  color: var(--text-main);
+  overflow-x: clip;
 }
 
-.chart-panel { padding-top: 12px; }
+.main-layout-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2.15fr) minmax(0, .85fr);
+  grid-template-areas: "chart right-top" "ea logs";
+  align-items: stretch;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+}
 
-.chart-status {
+.panel {
+  min-width: 0;
+  max-width: 100%;
+  padding: 12px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--中圆角, 10px);
+}
+
+.chart-panel {
+  grid-area: chart;
+  align-self: stretch;
+  padding: 8px;
+}
+
+.right-top-group {
+  grid-area: right-top;
   display: flex;
-  align-items: center;
-  gap: 9px;
-  min-height: 30px;
-  color: var(--次要灰色文字, #848e9c);
-  font-size: 11px;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
 }
 
-.status-dot {
-  width: 7px;
-  height: 7px;
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(4, minmax(0, 1fr));
   flex: 0 0 auto;
-  border-radius: 50%;
-  background: #848e9c;
+  gap: 6px;
+  min-width: 0;
 }
 
-.status-dot.status-live { background: #0ecb81; }
-
-.chart-symbol {
-  margin-left: auto;
-  color: var(--主要文字颜色, #fff);
+.metric-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  min-height: 70px;
+  padding: 8px;
 }
 
-.chart-count { white-space: nowrap; }
+.panel-label {
+  display: block;
+  min-width: 0;
+  color: var(--text-sub);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .3px;
+}
 
-.chart-host {
+.panel-main-val {
+  overflow: hidden;
+  margin-top: 7px;
+  color: var(--text-main);
+  font-size: clamp(13px, 1.05vw, 19px);
+  font-weight: 750;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.panel-main-val.negative,
+.panel-sub-text.negative {
+  color: var(--negative);
+}
+
+.panel-sub-text {
+  margin-top: 5px;
+  color: var(--text-sub);
+  font-size: 9px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.mt5-chart-container {
   position: relative;
   width: 100%;
-  height: clamp(420px, 49vw, 660px);
-  min-height: 360px;
+  max-width: 100%;
+  height: var(--chart-height);
+  min-width: 0;
   overflow: hidden;
-  background: var(--表面卡片背景色, #141722);
-  touch-action: none;
-  user-select: none;
-  -webkit-user-select: none;
+  border-radius: var(--小圆角, 6px);
+  background: #0b0d12;
 }
 
-.history-panel { padding-bottom: 16px; }
-.history-heading { margin-bottom: 18px; }
+.mt5-chart-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+}
 
-.history-heading h2 {
-  color: var(--主要文字颜色, #fff);
-  font-size: 14px;
+.symbol-badge {
+  position: absolute;
+  z-index: 5;
+  top: 12px;
+  left: 12px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid #303746;
+  border-radius: 5px;
+  background: rgba(20, 23, 34, .94);
+  color: #e8c56a;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: .5px;
+  pointer-events: none;
+}
+
+.chart-error {
+  position: absolute;
+  z-index: 6;
+  top: 50px;
+  left: 12px;
+  max-width: calc(100% - 24px);
+  padding: 7px 9px;
+  border: 1px solid rgba(246, 70, 93, .3);
+  border-radius: 5px;
+  background: rgba(20, 23, 34, .94);
+  color: #f59f9f;
+  font-size: 11px;
+  pointer-events: none;
+}
+
+.panel-heading,
+.ea-panel-header,
+.records-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ea-panel-header {
+  margin-bottom: 10px;
+}
+
+.ea-target-info,
+.history-tag,
+.records-count {
+  color: var(--text-sub);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.ea-bots-panel {
+  grid-area: ea;
+  min-width: 0;
+  align-self: stretch;
+}
+
+.ea-track-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.ea-card {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  padding: 9px;
+  background: var(--主页面背景色, #0b0d12);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--小圆角, 6px);
+}
+
+.ea-card.active {
+  border-color: var(--positive);
+  box-shadow: 0 0 8px rgba(14, 203, 129, .08);
+}
+
+.ea-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ea-avatar-letter {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 10px;
   font-weight: 700;
 }
 
-.history-overview {
+.avatar-1 { background: #3b5bdb; }
+.avatar-2 { background: #f59f00; }
+.avatar-3 { background: #7048e8; }
+.avatar-4 { background: #2b8a3e; }
+.avatar-5 { background: #1098ad; }
+.avatar-6 { background: #d9480f; }
+.avatar-7 { background: #5c940d; }
+.avatar-8 { background: #315bff; }
+
+.ea-num {
+  color: var(--text-sub);
+  font-size: 9px;
+}
+
+.ea-name {
+  overflow: hidden;
+  color: var(--text-main);
+  font-size: 11px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ea-return,
+.ea-pnl {
+  color: var(--text-sub);
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.ea-pnl {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.ea-pnl span {
+  color: var(--positive);
+  white-space: nowrap;
+}
+
+.ea-pnl span.negative {
+  color: var(--negative);
+}
+
+.winrate-content {
   display: flex;
   align-items: center;
-  margin-bottom: 15px;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 7px;
 }
 
-.history-description {
-  color: var(--次要灰色文字, #848e9c);
-  font-size: 11px;
-  font-weight: 500;
+.winrate-circle {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border-radius: 50%;
+  background: conic-gradient(var(--positive) 0 36%, var(--panel-border) 36% 100%);
+  font-size: 9px;
+  font-weight: 750;
 }
 
-.history-table-wrap {
+.winrate-circle::before {
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  background: var(--panel-bg);
+  content: "";
+}
+
+.winrate-circle span {
+  position: relative;
+  z-index: 1;
+}
+
+.winrate-badge-text {
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.winrate-badge-text .win {
+  color: var(--positive);
+}
+
+.winrate-badge-text .loss {
+  color: var(--text-sub);
+}
+
+.history-panel {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 190px;
+  margin: 0;
+  padding: 12px;
+}
+
+.history-chart {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 80px;
+  margin-top: 10px;
+}
+
+.history-chart svg {
+  display: block;
   width: 100%;
+  height: 100%;
+  min-height: 80px;
+}
+
+.history-axis {
+  display: flex;
+  justify-content: space-between;
+  gap: 5px;
+  margin-top: 6px;
+  color: var(--text-sub);
+  font-size: 9px;
+}
+
+.copy-log-panel {
+  grid-area: logs;
+  align-self: stretch;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  padding: 12px;
+  overflow: hidden;
+}
+
+.live-indicator {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--positive);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.live-indicator i {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: var(--positive);
+  box-shadow: 0 0 6px rgba(14, 203, 129, .4);
+}
+
+.copy-log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  min-width: 0;
+  margin-top: 12px;
+}
+
+.log-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-family: monospace;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.log-badge {
+  flex: 0 0 auto;
+  font-weight: 700;
+}
+
+.log-badge.exit { color: var(--text-sub); }
+.log-badge.sync { color: var(--positive); }
+.log-badge.fill { color: #f3c66b; }
+.log-badge.track { color: #9b9fff; }
+.log-badge.copy { color: #a98aff; }
+
+.log-content {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-sub);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trading-records-panel {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  margin-top: 12px;
+}
+
+.records-heading {
+  margin-bottom: 14px;
+}
+
+.records-subtitle {
+  margin-top: 5px;
+  color: var(--text-sub);
+  font-size: 9px;
+}
+
+.records-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   overflow-x: auto;
-  border: 1px solid var(--边框线条颜色, #222630);
-  background: var(--表面卡片背景色, #141722);
+  overscroll-behavior-x: contain;
 }
 
-.history-table {
+.records-table {
   width: 100%;
-  min-width: 850px;
   border-collapse: collapse;
+  font-size: 11px;
   text-align: left;
+  white-space: nowrap;
 }
 
-.history-table th {
-  height: 42px;
-  padding: 0 13px;
-  color: var(--次要灰色文字, #848e9c);
-  border-bottom: 1px solid var(--边框线条颜色, #222630);
-  background: transparent;
+.records-table th {
+  padding: 11px 12px;
+  color: var(--text-sub);
+  background: var(--主页面背景色, #0b0d12);
+  border-bottom: 1px solid var(--panel-border);
   font-size: 10px;
   font-weight: 600;
-  white-space: nowrap;
 }
 
-.history-table td {
-  padding: 12px 13px;
-  color: var(--主要文字颜色, #fff);
-  font-size: 11px;
-  white-space: nowrap;
-  border-bottom: 1px solid rgba(132, 142, 156, .08);
+.records-table td {
+  padding: 12px;
+  color: var(--text-main);
+  border-bottom: 1px solid var(--panel-border);
 }
 
-.profit-text { color: var(--涨势绿色, #0ecb81) !important; }
-.loss-text { color: var(--跌势红色, #f6465d) !important; }
+.records-table tbody tr:last-child td {
+  border-bottom: 0;
+}
 
-.empty-history {
-  display: flex;
+.records-table tbody tr:hover {
+  background: rgba(132, 142, 156, .05);
+}
+
+.record-time {
+  color: var(--text-sub) !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.record-bot {
+  font-weight: 600;
+}
+
+.side-tag,
+.status-tag {
+  display: inline-flex;
   align-items: center;
-  flex-direction: column;
-  justify-content: center;
-  gap: 10px;
-  min-height: 200px;
-  padding: 28px 12px;
-  text-align: center;
+  padding: 3px 7px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 650;
 }
 
-.empty-history-icon {
-  display: grid;
-  width: 42px;
-  height: 42px;
-  place-items: center;
-  color: var(--次要灰色文字, #848e9c);
-  border: 1px solid var(--边框线条颜色, #222630);
-  background: transparent;
+.side-tag.buy {
+  color: var(--positive);
+  background: rgba(14, 203, 129, .1);
 }
 
-.empty-history-icon svg { width: 21px; height: 21px; }
-
-.empty-history strong {
-  color: var(--次要灰色文字, #848e9c);
-  font-size: 12px;
+.side-tag.sell {
+  color: var(--negative);
+  background: rgba(246, 70, 93, .1);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .ticker-track { animation: none; }
+.record-pnl {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
-@media (min-width: 1600px) {
-  .live-page { padding-inline: 36px; }
+.record-pnl.positive {
+  color: var(--positive);
 }
 
-@media (max-width: 850px) {
-  .live-page { padding: 24px 14px 34px; }
-  .chart-host { height: 480px; }
-  .section-panel { padding: 17px; }
+.record-pnl.negative {
+  color: var(--negative);
 }
 
-@media (max-width: 520px) {
-  .live-page { padding: 20px 9px 28px; }
-  .ticker-item { min-width: 205px; padding: 13px 12px; }
-  .section-panel { padding: 14px 9px; }
-  .chart-host { height: 430px; min-height: 350px; }
-  .chart-status { gap: 6px; font-size: 10px; }
-  .chart-count { display: none; }
+.status-tag {
+  color: var(--text-sub);
+  background: rgba(132, 142, 156, .1);
+}
+
+.status-tag.running {
+  color: var(--positive);
+  background: rgba(14, 203, 129, .1);
+}
+
+@media (max-width: 1050px) {
+  .grok-live-page {
+    --chart-height: clamp(400px, 55vh, 580px);
+  }
+
+  .main-layout-grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "chart" "ea" "right-top" "logs";
+  }
+
+  .right-top-group {
+    height: auto;
+  }
+
+  .metrics-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-rows: auto;
+  }
+
+  .metric-card {
+    min-height: 82px;
+  }
+
+  .history-panel {
+    flex: none;
+    min-height: 200px;
+  }
+
+  .copy-log-panel {
+    height: auto;
+    min-height: 150px;
+  }
+}
+
+@media (max-width: 620px) {
+  .grok-live-page {
+    --chart-height: 400px;
+    padding: 8px;
+  }
+
+  .metrics-grid,
+  .ea-track-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .metrics-grid {
+    grid-template-rows: auto;
+    gap: 8px;
+  }
+
+  .metric-card {
+    min-height: 82px;
+  }
+
+  .panel,
+  .trading-records-panel {
+    padding: 10px;
+  }
+
+  .chart-panel {
+    padding: 6px;
+  }
+
+  .records-table th,
+  .records-table td {
+    padding: 10px;
+  }
 }
 </style>
