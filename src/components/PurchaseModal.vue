@@ -42,7 +42,7 @@
         <div v-if="error" class="error">{{ error }}</div>
 
         <button class="pay-btn" :disabled="loading" @click="createOrder">
-          {{ loading ? '正在创建订单...' : '立即支付' }}
+          {{ loading ? '正在创建订单...' : '请立即支付' }}
         </button>
       </div>
 
