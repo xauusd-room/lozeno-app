@@ -2,7 +2,7 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { createChart, CandlestickSeries, createSeriesMarkers } from 'lightweight-charts'
 
-const WS_URL = 'ws://127.0.0.1:8001'
+const WS_URL = 'wss://lozeno-market.aaa375750526.workers.dev/ws'
 const HISTORY_LIMIT = 300
 const RIGHT_SPACE_BARS = 12
 
@@ -135,6 +135,7 @@ function updateTradeMarkers(markers = []) {
   }
 }
 
+
 function handleMessage(event) {
   let message
 
@@ -144,14 +145,23 @@ function handleMessage(event) {
     return
   }
 
+  // Cloudflare 会将 Python 发布的数据包装在 market.data 中
+  if (message.type === 'market') {
+    message = message.data
+  }
+
   switch (message.type) {
+    case 'connected':
+      wsError.value = ''
+      break
+
     case 'snapshot':
       loadCandles(message.candles)
       wsError.value = ''
       break
 
     case 'tick':
-      // 接收实时行情消息；当前页面不单独显示买卖报价。
+      // Tick 用于实时报价；当前页面不单独显示买卖报价
       break
 
     case 'candle_update':
