@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (() => {
+        const storageKey = 'theme';
+        const root = document.documentElement;
+        const storedTheme = localStorage.getItem(storageKey);
+        const theme = storedTheme === 'light' || storedTheme === 'dark' ? storedTheme : 'dark';
+        root.classList.remove('light', 'dark');
+        root.classList.add(theme);
+        root.style.colorScheme = theme;
+      })();
+    </script>
+    <title>dsa-web</title>
+    <script type="module" crossorigin src="/assets/index-CD4HjWxD.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/vendor-react-hJ8hYAuJ.js">
+    <link rel="modulepreload" crossorigin href="/assets/vendor-router-Bhh8FwoD.js">
+    <link rel="modulepreload" crossorigin href="/assets/vendor-ClIPietD.js">
+    <link rel="modulepreload" crossorigin href="/assets/vendor-icons-COVIhuI2.js">
+    <link rel="stylesheet" crossorigin href="/assets/index-DMu0Y2lj.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

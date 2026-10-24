@@ -1,0 +1,62 @@
+2026-10-24 21:25:42 | INFO     | root | src\logging_config.py:188 | 日志系统初始化完成，日志目录: logs
+2026-10-24 21:25:42 | INFO     | root | src\logging_config.py:189 | 常规日志: logs\stock_analysis_20261024.log
+2026-10-24 21:25:42 | INFO     | root | src\logging_config.py:190 | 调试日志: logs\stock_analysis_debug_20261024.log
+2026-10-24 21:25:42 | INFO     | __main__ | main.py:1584 | ============================================================
+2026-10-24 21:25:42 | INFO     | __main__ | main.py:1585 | A股自选股智能分析系统 启动
+2026-10-24 21:25:42 | INFO     | __main__ | main.py:1586 | 运行时间: 2026-10-24 21:25:42
+2026-10-24 21:25:42 | INFO     | __main__ | main.py:1587 | ============================================================
+2026-10-24 21:25:42 | WARNING  | __main__ | main.py:1592 | 未配置 STOCK_LIST。请设置至少一个股票代码，例如：600519,hk00700,AAPL。
+2026-10-24 21:25:42 | WARNING  | __main__ | main.py:1592 | 未配置 Tushare Token，将使用其他数据源
+2026-10-24 21:25:42 | WARNING  | __main__ | main.py:1592 | 未配置搜索引擎能力 (Bocha/MiniMax/Tavily/Brave/SerpAPI/SearXNG)，新闻搜索功能将不可用
+2026-10-24 21:25:42 | WARNING  | __main__ | main.py:1592 | 未配置通知渠道，将不发送推送通知
+2026-10-24 21:25:42 | WARNING  | src.core.trading_calendar | src\core\trading_calendar.py:35 | exchange-calendars not installed; trading day check disabled. Run: pip install exchange-calendars
+2026-10-24 21:25:43 | ERROR    | __main__ | main.py:1941 | 程序执行失败: No module named 'sqlalchemy'
+Traceback (most recent call last):
+  File "D:\0、聪明钱策略\16-LOZENO\daily_stock_analysis-main\main.py", line 1899, in main
+    analysis_ok = _run_analysis_with_runtime_scheduler_lock(
+        config, args, stock_codes, analysis_targets
+    )
+  File "D:\0、聪明钱策略\16-LOZENO\daily_stock_analysis-main\main.py", line 1292, in _run_analysis_with_runtime_scheduler_lock
+    lock_acquired = run_with_global_analysis_lock(
+        task_runner=_locked_task_runner,
+    ...<3 lines>...
+        blocking=True,
+    )
+  File "D:\0、聪明钱策略\16-LOZENO\daily_stock_analysis-main\src\services\runtime_scheduler.py", line 56, in run_with_global_analysis_lock
+    task_runner(config, args, stock_codes)
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\0、聪明钱策略\16-LOZENO\daily_stock_analysis-main\main.py", line 1278, in _locked_task_runner
+    result = run_full_analysis(locked_config, locked_args, locked_stock_codes)
+  File "D:\0、聪明钱策略\16-LOZENO\daily_stock_analysis-main\main.py", line 837, in run_full_analysis
+    from src.core.market_review import run_market_review
+  File "D:\0、聪明钱策略\16-LOZENO\daily_stock_analysis-main\src\core\market_review.py", line 22, in <module>
+    from src.notification import NotificationService
+  File "D:\0、聪明钱策略\16-LOZENO\daily_stock_analysis-main\src\notification.py", line 63, in <module>
+    from bot.models import BotMessage
+  File "D:\0、聪明钱策略\16-LOZENO\daily_stock_analysis-main\bot\__init__.py", line 35, in <module>
+    from bot.dispatcher import CommandDispatcher, get_dispatcher
+  File "D:\0、聪明钱策略\16-LOZENO\daily_stock_analysis-main\bot\dispatcher.py", line 19, in <module>
+    from bot.commands.base import BotCommand
+  File "D:\0、聪明钱策略\16-LOZENO\daily_stock_analysis-main\bot\commands\__init__.py", line 16, in <module>
+    from bot.commands.ask import AskCommand
+  File "D:\0、聪明钱策略\16-LOZENO\daily_stock_analysis-main\bot\commands\ask.py", line 22, in <module>
+    from src.storage import get_db
+  File "D:\0、聪明钱策略\16-LOZENO\daily_stock_analysis-main\src\storage.py", line 26, in <module>
+    from sqlalchemy import (
+    ...<24 lines>...
+    )
+ModuleNotFoundError: No module named 'sqlalchemy'
+2026-10-24 21:37:09 | INFO     | root | src\logging_config.py:188 | 日志系统初始化完成，日志目录: logs
+2026-10-24 21:37:09 | INFO     | root | src\logging_config.py:189 | 常规日志: logs\stock_analysis_20261024.log
+2026-10-24 21:37:09 | INFO     | root | src\logging_config.py:190 | 调试日志: logs\stock_analysis_debug_20261024.log
+2026-10-24 21:37:09 | INFO     | __main__ | main.py:1584 | ============================================================
+2026-10-24 21:37:09 | INFO     | __main__ | main.py:1585 | A股自选股智能分析系统 启动
+2026-10-24 21:37:09 | INFO     | __main__ | main.py:1586 | 运行时间: 2026-10-24 21:37:09
+2026-10-24 21:37:09 | INFO     | __main__ | main.py:1587 | ============================================================
+2026-10-24 21:37:09 | WARNING  | __main__ | main.py:1592 | 未配置 STOCK_LIST。请设置至少一个股票代码，例如：600519,hk00700,AAPL。
+2026-10-24 21:37:09 | WARNING  | __main__ | main.py:1592 | 未配置 Tushare Token，将使用其他数据源
+2026-10-24 21:37:09 | WARNING  | __main__ | main.py:1592 | 未配置搜索引擎能力 (Bocha/MiniMax/Tavily/Brave/SerpAPI/SearXNG)，新闻搜索功能将不可用
+2026-10-24 21:37:09 | WARNING  | __main__ | main.py:1592 | 未配置通知渠道，将不发送推送通知
+2026-10-24 21:37:13 | INFO     | __main__ | main.py:884 | 今日所有相关市场均为非交易日，跳过执行。可使用 --force-run 强制执行。
+2026-10-24 21:37:13 | INFO     | __main__ | main.py:1922 | 
+程序执行完成

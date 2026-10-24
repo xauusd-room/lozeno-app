@@ -1,0 +1,97 @@
+2026-10-24 21:25:42 | INFO     | root | src\logging_config.py:188 | 日志系统初始化完成，日志目录: logs
+2026-10-24 21:25:42 | INFO     | root | src\logging_config.py:189 | 常规日志: logs\stock_analysis_20261024.log
+2026-10-24 21:25:42 | INFO     | root | src\logging_config.py:190 | 调试日志: logs\stock_analysis_debug_20261024.log
+2026-10-24 21:25:42 | INFO     | __main__ | main.py:1584 | ============================================================
+2026-10-24 21:25:42 | INFO     | __main__ | main.py:1585 | A股自选股智能分析系统 启动
+2026-10-24 21:25:42 | INFO     | __main__ | main.py:1586 | 运行时间: 2026-10-24 21:25:42
+2026-10-24 21:25:42 | INFO     | __main__ | main.py:1587 | ============================================================
+2026-10-24 21:25:42 | WARNING  | __main__ | main.py:1592 | 未配置 STOCK_LIST。请设置至少一个股票代码，例如：600519,hk00700,AAPL。
+2026-10-24 21:25:42 | WARNING  | __main__ | main.py:1592 | 未配置 Tushare Token，将使用其他数据源
+2026-10-24 21:25:42 | WARNING  | __main__ | main.py:1592 | 未配置搜索引擎能力 (Bocha/MiniMax/Tavily/Brave/SerpAPI/SearXNG)，新闻搜索功能将不可用
+2026-10-24 21:25:42 | WARNING  | __main__ | main.py:1592 | 未配置通知渠道，将不发送推送通知
+2026-10-24 21:25:42 | WARNING  | src.core.trading_calendar | src\core\trading_calendar.py:35 | exchange-calendars not installed; trading day check disabled. Run: pip install exchange-calendars
+2026-10-24 21:25:43 | ERROR    | __main__ | main.py:1941 | 程序执行失败: No module named 'sqlalchemy'
+Traceback (most recent call last):
+  File "D:\0、聪明钱策略\16-LOZENO\daily_stock_analysis-main\main.py", line 1899, in main
+    analysis_ok = _run_analysis_with_runtime_scheduler_lock(
+        config, args, stock_codes, analysis_targets
+    )
+  File "D:\0、聪明钱策略\16-LOZENO\daily_stock_analysis-main\main.py", line 1292, in _run_analysis_with_runtime_scheduler_lock
+    lock_acquired = run_with_global_analysis_lock(
+        task_runner=_locked_task_runner,
+    ...<3 lines>...
+        blocking=True,
+    )
+  File "D:\0、聪明钱策略\16-LOZENO\daily_stock_analysis-main\src\services\runtime_scheduler.py", line 56, in run_with_global_analysis_lock
+    task_runner(config, args, stock_codes)
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\0、聪明钱策略\16-LOZENO\daily_stock_analysis-main\main.py", line 1278, in _locked_task_runner
+    result = run_full_analysis(locked_config, locked_args, locked_stock_codes)
+  File "D:\0、聪明钱策略\16-LOZENO\daily_stock_analysis-main\main.py", line 837, in run_full_analysis
+    from src.core.market_review import run_market_review
+  File "D:\0、聪明钱策略\16-LOZENO\daily_stock_analysis-main\src\core\market_review.py", line 22, in <module>
+    from src.notification import NotificationService
+  File "D:\0、聪明钱策略\16-LOZENO\daily_stock_analysis-main\src\notification.py", line 63, in <module>
+    from bot.models import BotMessage
+  File "D:\0、聪明钱策略\16-LOZENO\daily_stock_analysis-main\bot\__init__.py", line 35, in <module>
+    from bot.dispatcher import CommandDispatcher, get_dispatcher
+  File "D:\0、聪明钱策略\16-LOZENO\daily_stock_analysis-main\bot\dispatcher.py", line 19, in <module>
+    from bot.commands.base import BotCommand
+  File "D:\0、聪明钱策略\16-LOZENO\daily_stock_analysis-main\bot\commands\__init__.py", line 16, in <module>
+    from bot.commands.ask import AskCommand
+  File "D:\0、聪明钱策略\16-LOZENO\daily_stock_analysis-main\bot\commands\ask.py", line 22, in <module>
+    from src.storage import get_db
+  File "D:\0、聪明钱策略\16-LOZENO\daily_stock_analysis-main\src\storage.py", line 26, in <module>
+    from sqlalchemy import (
+    ...<24 lines>...
+    )
+ModuleNotFoundError: No module named 'sqlalchemy'
+2026-10-24 21:37:09 | INFO     | root | src\logging_config.py:188 | 日志系统初始化完成，日志目录: logs
+2026-10-24 21:37:09 | INFO     | root | src\logging_config.py:189 | 常规日志: logs\stock_analysis_20261024.log
+2026-10-24 21:37:09 | INFO     | root | src\logging_config.py:190 | 调试日志: logs\stock_analysis_debug_20261024.log
+2026-10-24 21:37:09 | INFO     | __main__ | main.py:1584 | ============================================================
+2026-10-24 21:37:09 | INFO     | __main__ | main.py:1585 | A股自选股智能分析系统 启动
+2026-10-24 21:37:09 | INFO     | __main__ | main.py:1586 | 运行时间: 2026-10-24 21:37:09
+2026-10-24 21:37:09 | INFO     | __main__ | main.py:1587 | ============================================================
+2026-10-24 21:37:09 | WARNING  | __main__ | main.py:1592 | 未配置 STOCK_LIST。请设置至少一个股票代码，例如：600519,hk00700,AAPL。
+2026-10-24 21:37:09 | WARNING  | __main__ | main.py:1592 | 未配置 Tushare Token，将使用其他数据源
+2026-10-24 21:37:09 | WARNING  | __main__ | main.py:1592 | 未配置搜索引擎能力 (Bocha/MiniMax/Tavily/Brave/SerpAPI/SearXNG)，新闻搜索功能将不可用
+2026-10-24 21:37:09 | WARNING  | __main__ | main.py:1592 | 未配置通知渠道，将不发送推送通知
+2026-10-24 21:37:10 | DEBUG    | httpcore.connection | D:\0、聪明钱策略\16-LOZENO\.venv\Lib\site-packages\httpcore\_trace.py:47 | connect_tcp.started host='127.0.0.1' port=15715 local_address=None timeout=5 socket_options=None
+2026-10-24 21:37:10 | DEBUG    | httpcore.connection | D:\0、聪明钱策略\16-LOZENO\.venv\Lib\site-packages\httpcore\_trace.py:47 | connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x00000203255342F0>
+2026-10-24 21:37:10 | DEBUG    | httpcore.http11 | D:\0、聪明钱策略\16-LOZENO\.venv\Lib\site-packages\httpcore\_trace.py:47 | send_request_headers.started request=<Request [b'CONNECT']>
+2026-10-24 21:37:10 | DEBUG    | httpcore.http11 | D:\0、聪明钱策略\16-LOZENO\.venv\Lib\site-packages\httpcore\_trace.py:47 | send_request_headers.complete
+2026-10-24 21:37:10 | DEBUG    | httpcore.http11 | D:\0、聪明钱策略\16-LOZENO\.venv\Lib\site-packages\httpcore\_trace.py:47 | send_request_body.started request=<Request [b'CONNECT']>
+2026-10-24 21:37:10 | DEBUG    | httpcore.http11 | D:\0、聪明钱策略\16-LOZENO\.venv\Lib\site-packages\httpcore\_trace.py:47 | send_request_body.complete
+2026-10-24 21:37:10 | DEBUG    | httpcore.http11 | D:\0、聪明钱策略\16-LOZENO\.venv\Lib\site-packages\httpcore\_trace.py:47 | receive_response_headers.started request=<Request [b'CONNECT']>
+2026-10-24 21:37:10 | DEBUG    | httpcore.http11 | D:\0、聪明钱策略\16-LOZENO\.venv\Lib\site-packages\httpcore\_trace.py:47 | receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'Connection established', [])
+2026-10-24 21:37:10 | DEBUG    | httpcore.proxy | D:\0、聪明钱策略\16-LOZENO\.venv\Lib\site-packages\httpcore\_trace.py:47 | start_tls.started ssl_context=<ssl.SSLContext object at 0x0000020325346410> server_hostname='raw.githubusercontent.com' timeout=5
+2026-10-24 21:37:11 | DEBUG    | httpcore.proxy | D:\0、聪明钱策略\16-LOZENO\.venv\Lib\site-packages\httpcore\_trace.py:47 | start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x000002032542BC50>
+2026-10-24 21:37:11 | DEBUG    | httpcore.http11 | D:\0、聪明钱策略\16-LOZENO\.venv\Lib\site-packages\httpcore\_trace.py:47 | send_request_headers.started request=<Request [b'GET']>
+2026-10-24 21:37:11 | DEBUG    | httpcore.http11 | D:\0、聪明钱策略\16-LOZENO\.venv\Lib\site-packages\httpcore\_trace.py:47 | send_request_headers.complete
+2026-10-24 21:37:11 | DEBUG    | httpcore.http11 | D:\0、聪明钱策略\16-LOZENO\.venv\Lib\site-packages\httpcore\_trace.py:47 | send_request_body.started request=<Request [b'GET']>
+2026-10-24 21:37:11 | DEBUG    | httpcore.http11 | D:\0、聪明钱策略\16-LOZENO\.venv\Lib\site-packages\httpcore\_trace.py:47 | send_request_body.complete
+2026-10-24 21:37:11 | DEBUG    | httpcore.http11 | D:\0、聪明钱策略\16-LOZENO\.venv\Lib\site-packages\httpcore\_trace.py:47 | receive_response_headers.started request=<Request [b'GET']>
+2026-10-24 21:37:11 | DEBUG    | httpcore.http11 | D:\0、聪明钱策略\16-LOZENO\.venv\Lib\site-packages\httpcore\_trace.py:47 | receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'Connection', b'keep-alive'), (b'Content-Length', b'153637'), (b'Cache-Control', b'max-age=300'), (b'Content-Security-Policy', b"default-src 'none'; style-src 'unsafe-inline'; sandbox"), (b'Content-Type', b'text/plain; charset=utf-8'), (b'ETag', b'W/"0ff5e5a8c13d4ded161227097a20ca82dcfa835ec9b18d411ffa7212ce7a9b1f"'), (b'Strict-Transport-Security', b'max-age=31536000'), (b'X-Content-Type-Options', b'nosniff'), (b'X-Frame-Options', b'deny'), (b'X-XSS-Protection', b'1; mode=block'), (b'X-GitHub-Request-Id', b'C730:1E8DFD:3383F2:38DB6B:6ADC259F'), (b'x-github-edge-region', b'southeastasia'), (b'Content-Encoding', b'gzip'), (b'Accept-Ranges', b'bytes'), (b'Date', b'Sat, 24 Oct 2026 13:37:10 GMT'), (b'Via', b'1.1 varnish'), (b'X-Served-By', b'cache-sin-wsap440081-SIN'), (b'X-Cache', b'HIT'), (b'X-Cache-Hits', b'73'), (b'X-Timer', b'S1792849031.788378,VS0,VE0'), (b'Vary', b'Authorization,Accept-Encoding'), (b'Access-Control-Allow-Origin', b'*'), (b'Cross-Origin-Resource-Policy', b'cross-origin'), (b'X-Fastly-Request-ID', b'0f119bf83839bc77eef33f6f2c9f82dfcc165530'), (b'Expires', b'Sat, 24 Oct 2026 13:42:10 GMT'), (b'Source-Age', b'250')])
+2026-10-24 21:37:11 | DEBUG    | httpcore.http11 | D:\0、聪明钱策略\16-LOZENO\.venv\Lib\site-packages\httpcore\_trace.py:47 | receive_response_body.started request=<Request [b'GET']>
+2026-10-24 21:37:11 | DEBUG    | httpcore.http11 | D:\0、聪明钱策略\16-LOZENO\.venv\Lib\site-packages\httpcore\_trace.py:47 | receive_response_body.complete
+2026-10-24 21:37:11 | DEBUG    | httpcore.http11 | D:\0、聪明钱策略\16-LOZENO\.venv\Lib\site-packages\httpcore\_trace.py:47 | response_closed.started
+2026-10-24 21:37:11 | DEBUG    | httpcore.http11 | D:\0、聪明钱策略\16-LOZENO\.venv\Lib\site-packages\httpcore\_trace.py:47 | response_closed.complete
+2026-10-24 21:37:12 | DEBUG    | src.agent.skills.base | src\agent\skills\base.py:300 | Loaded skill from YAML: bottom_volume (bottom_volume.yaml)
+2026-10-24 21:37:12 | DEBUG    | src.agent.skills.base | src\agent\skills\base.py:300 | Loaded skill from YAML: box_oscillation (box_oscillation.yaml)
+2026-10-24 21:37:12 | DEBUG    | src.agent.skills.base | src\agent\skills\base.py:300 | Loaded skill from YAML: bull_trend (bull_trend.yaml)
+2026-10-24 21:37:12 | DEBUG    | src.agent.skills.base | src\agent\skills\base.py:300 | Loaded skill from YAML: chan_theory (chan_theory.yaml)
+2026-10-24 21:37:12 | DEBUG    | src.agent.skills.base | src\agent\skills\base.py:300 | Loaded skill from YAML: dragon_head (dragon_head.yaml)
+2026-10-24 21:37:12 | DEBUG    | src.agent.skills.base | src\agent\skills\base.py:300 | Loaded skill from YAML: emotion_cycle (emotion_cycle.yaml)
+2026-10-24 21:37:12 | DEBUG    | src.agent.skills.base | src\agent\skills\base.py:300 | Loaded skill from YAML: event_driven (event_driven.yaml)
+2026-10-24 21:37:12 | DEBUG    | src.agent.skills.base | src\agent\skills\base.py:300 | Loaded skill from YAML: expectation_repricing (expectation_repricing.yaml)
+2026-10-24 21:37:12 | DEBUG    | src.agent.skills.base | src\agent\skills\base.py:300 | Loaded skill from YAML: growth_quality (growth_quality.yaml)
+2026-10-24 21:37:12 | DEBUG    | src.agent.skills.base | src\agent\skills\base.py:300 | Loaded skill from YAML: hot_theme (hot_theme.yaml)
+2026-10-24 21:37:12 | DEBUG    | src.agent.skills.base | src\agent\skills\base.py:300 | Loaded skill from YAML: ma_golden_cross (ma_golden_cross.yaml)
+2026-10-24 21:37:12 | DEBUG    | src.agent.skills.base | src\agent\skills\base.py:300 | Loaded skill from YAML: one_yang_three_yin (one_yang_three_yin.yaml)
+2026-10-24 21:37:12 | DEBUG    | src.agent.skills.base | src\agent\skills\base.py:300 | Loaded skill from YAML: shrink_pullback (shrink_pullback.yaml)
+2026-10-24 21:37:12 | DEBUG    | src.agent.skills.base | src\agent\skills\base.py:300 | Loaded skill from YAML: volume_breakout (volume_breakout.yaml)
+2026-10-24 21:37:12 | DEBUG    | src.agent.skills.base | src\agent\skills\base.py:300 | Loaded skill from YAML: wave_theory (wave_theory.yaml)
+2026-10-24 21:37:13 | INFO     | __main__ | main.py:884 | 今日所有相关市场均为非交易日，跳过执行。可使用 --force-run 强制执行。
+2026-10-24 21:37:13 | INFO     | __main__ | main.py:1922 | 
+程序执行完成
