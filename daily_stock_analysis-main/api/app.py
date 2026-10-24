@@ -352,6 +352,7 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
         "http://127.0.0.1:5173",
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "https://lozeno-stocks.pages.dev",
     ]
     
     # 从环境变量添加额外的允许来源
