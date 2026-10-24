@@ -13,7 +13,7 @@
       <div class="error-card">
         <div class="error-icon">!</div>
         <h2>股票分析系统暂时无法加载</h2>
-        <p>请确认 DSA 前端服务仍在运行。</p>
+        <p>请确认 DSA 前端服务仍可访问。</p>
         <p class="error-address">https://lozeno-stocks.pages.dev/</p>
         <button class="retry-button" @click="reloadDSA">
           重新加载
@@ -23,13 +23,13 @@
 
     <iframe
       :key="frameKey"
+      ref="dsaFrame"
       class="dsa-frame"
-      src="http://127.0.0.1:5174/"
+      :src="DSA_URL"
       title="LOZENO DSA 股票分析系统"
       allow="clipboard-read; clipboard-write"
       referrerpolicy="strict-origin-when-cross-origin"
       @load="handleLoad"
-      @error="handleError"
     />
   </section>
 </template>
@@ -37,33 +37,55 @@
 <script setup>
 import { ref } from 'vue'
 
+const DSA_URL = 'https://lozeno-stocks.pages.dev/'
+
 const loading = ref(true)
 const loadError = ref(false)
 const frameKey = ref(0)
 
-function handleLoad() {
-  loading.value = false
-  loadError.value = false
+let loadTimeout = null
+
+function clearLoadTimeout() {
+  if (loadTimeout !== null) {
+    clearTimeout(loadTimeout)
+    loadTimeout = null
+  }
 }
 
-function handleError() {
+function startLoadTimeout() {
+  clearLoadTimeout()
+
+  loadTimeout = setTimeout(() => {
+    if (loading.value) {
+      loading.value = false
+      loadError.value = true
+    }
+  }, 20000)
+}
+
+function handleLoad() {
+  clearLoadTimeout()
   loading.value = false
-  loadError.value = true
+  loadError.value = false
 }
 
 function reloadDSA() {
+  clearLoadTimeout()
   loading.value = true
   loadError.value = false
   frameKey.value += 1
+  startLoadTimeout()
 }
+
+startLoadTimeout()
 </script>
 
 <style scoped>
 .stocks-page {
   position: relative;
   width: 100%;
-  min-height: calc(100vh - 74px);
   height: calc(100vh - 74px);
+  min-height: calc(100vh - 74px);
   overflow: hidden;
   background: #0b0d12;
 }
