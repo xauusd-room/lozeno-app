@@ -1,6 +1,9 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { useRouter } from 'vue-router'
 import { createChart, CandlestickSeries, createSeriesMarkers } from 'lightweight-charts'
+
+const router = useRouter()
 
 const HISTORY_LIMIT = 300
 const RIGHT_SPACE_BARS = 36
@@ -8,21 +11,21 @@ const SIM_TICK_MS = 250
 const SIM_SECONDS_PER_TICK = 30
 const CANDLE_SECONDS = 300
 
-const INITIAL_BALANCE = 1500.00
-const START_BALANCE = 1500.00
+const INITIAL_BALANCE = 77
+const START_BALANCE = 74.40
 const TAKE_PROFIT = 1.8
 const STOP_LOSS = 4.5
 const MAX_HOLD_TICKS = 24
 
 const botDefinitions = [
-  { id: 1, name: 'TrendMaster Pro', color: '#4C8DFF', pnl: 0, returnStr: '实盘策略 · 实时运行' },
-  { id: 2, name: 'GridScalper X', color: '#FF9F43', pnl: 0, returnStr: '实盘策略 · 实时运行' },
-  { id: 3, name: 'NeuralArbitrage', color: '#B084F5', pnl: 0, returnStr: '实盘策略 · 实时运行' },
-  { id: 4, name: 'MartinMaster', color: '#20C997', pnl: 0, returnStr: '实盘策略 · 实时运行' },
-  { id: 5, name: 'MomentumHunter', color: '#F06595', pnl: 0, returnStr: '实盘策略 · 实时运行' },
-  { id: 6, name: 'BreakoutRetest Pro', color: '#F4C542', pnl: 0, returnStr: '实盘策略 · 实时运行' },
-  { id: 7, name: 'ReversalMaster', color: '#22D3EE', pnl: 0, returnStr: '实盘策略 · 实时运行' },
-  { id: 8, name: 'SmartMoney X', color: '#FF6B6B', pnl: 0, returnStr: '实盘策略 · 实时运行' }
+  { id: '1', name: 'TrendMaster Pro', color: '#4C8DFF', pnl: 0, returnStr: '实盘策略 · 实时运行' },
+  { id: '2', name: 'GridScalper X', color: '#FF9F43', pnl: 0, returnStr: '实盘策略 · 实时运行' },
+  { id: '3', name: 'NeuralArbitrage', color: '#B084F5', pnl: 0, returnStr: '实盘策略 · 实时运行' },
+  { id: '4', name: 'MartinMaster', color: '#20C997', pnl: 0, returnStr: '实盘策略 · 实时运行' },
+  { id: '5', name: 'MomentumHunter', color: '#F06595', pnl: 0, returnStr: '实盘策略 · 实时运行' },
+  { id: '6', name: 'BreakoutRetest Pro', color: '#F4C542', pnl: 0, returnStr: '实盘策略 · 实时运行' },
+  { id: '7', name: 'ReversalMaster', color: '#22D3EE', pnl: 0, returnStr: '实盘策略 · 实时运行' },
+  { id: '8', name: 'SmartMoney X', color: '#FF6B6B', pnl: 0, returnStr: '实盘策略 · 实时运行' }
 ]
 
 const chartHost = ref(null)
@@ -353,7 +356,7 @@ function refreshFloatingProfit() {
 
 function chooseSide(bot) {
   const trend = recentMomentum
-  const bias = ((bot.id * 7 + tickCount.value) % 11) - 5
+  const bias = ((Number(bot.id) * 7 + tickCount.value) % 11) - 5
 
   if (Math.abs(trend) > 0.35) {
     return trend * 0.7 + bias * 0.08 >= 0 ? 'BUY' : 'SELL'
@@ -546,6 +549,11 @@ function advanceMarket() {
 
   openNextEligibleBot()
   refreshFloatingProfit()
+}
+
+// 点击 EA 卡片跳转到产品详情页
+function handleBotClick(bot) {
+  router.push(`/product?id=${bot.id}`)
 }
 
 function initChart() {
@@ -869,7 +877,7 @@ onBeforeUnmount(() => {
         <div class="ea-panel-header">
           <span class="panel-label">EA 机器人列表</span>
           <span class="ea-target-info">
-            共 {{ eaBots.length }} 个机器人 · 持仓优先显示
+            共 {{ eaBots.length }} 个机器人 · 持仓优先显示 · 点击前往购买
           </span>
         </div>
 
@@ -877,7 +885,8 @@ onBeforeUnmount(() => {
           <article
             v-for="(bot, index) in displayEaBots"
             :key="bot.id"
-            class="ea-card"
+            class="ea-card clickable-card"
+            @click="handleBotClick(bot)"
             :class="{
               active: Boolean(bot.position),
               'lead-trading': Boolean(bot.position) && index === 0,
@@ -1458,6 +1467,16 @@ onBeforeUnmount(() => {
     box-shadow 0.28s ease;
 }
 
+.ea-card.clickable-card {
+  cursor: pointer;
+}
+
+.ea-card.clickable-card:hover {
+  filter: brightness(1.15);
+  transform: translateY(-3px);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--bot-color, #4c8dff) 25%, transparent);
+}
+
 .ea-card.active {
   border-color: var(--bot-color, #4c8dff);
   background: linear-gradient(
@@ -1496,14 +1515,6 @@ onBeforeUnmount(() => {
       0 0 0 1px color-mix(in srgb, var(--bot-color, #4c8dff) 50%, transparent),
       0 14px 28px color-mix(in srgb, var(--bot-color, #4c8dff) 30%, transparent);
   }
-}
-
-.ea-card:hover {
-  z-index: 4;
-  border-color: var(--bot-color, #4c8dff);
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--bot-color, #4c8dff) 45%, transparent),
-    0 12px 28px color-mix(in srgb, var(--bot-color, #4c8dff) 25%, transparent);
 }
 
 .ea-card.lead-trading:hover {
