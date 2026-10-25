@@ -3,7 +3,7 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { createChart, CandlestickSeries, createSeriesMarkers } from 'lightweight-charts'
 
 const HISTORY_LIMIT = 300
-const RIGHT_SPACE_BARS = 12
+const RIGHT_SPACE_BARS = 36
 const SIM_TICK_MS = 250
 const SIM_SECONDS_PER_TICK = 30
 const CANDLE_SECONDS = 300
